@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>ua.minibank</groupId>
+    <artifactId>hibernate-course</artifactId>
+    <version>1.0</version>
+    <packaging>pom</packaging>
+    <name>Hibernate Course: Mini Bank</name>
+
+    <!--
+        Кожен модуль курсу має дві незалежні частини:
+          starter  — заготовка з TODO, з неї починається заняття;
+          solution — повний розв'язок.
+        Тести у starter-модулях вимкнені для `mvn verify` з кореня (skipTests),
+        але запускаються з IDEA кнопкою Run, щоб учень бачив, що ще не зроблено.
+    -->
+    <modules>
+        <module>m01-jdbc-to-hibernate/starter</module>
+        <module>m01-jdbc-to-hibernate/solution</module>
+        <module>m02-entity-mapping/starter</module>
+        <module>m02-entity-mapping/solution</module>
+        <module>m03-persistence-context/starter</module>
+        <module>m03-persistence-context/solution</module>
+        <module>m04-transactions/starter</module>
+        <module>m04-transactions/solution</module>
+        <module>m05-relationships/starter</module>
+        <module>m05-relationships/solution</module>
+        <module>m06-fetching/starter</module>
+        <module>m06-fetching/solution</module>
+        <module>m07-queries/starter</module>
+        <module>m07-queries/solution</module>
+        <module>m08-inheritance/starter</module>
+        <module>m08-inheritance/solution</module>
+        <module>m09-locking/starter</module>
+        <module>m09-locking/solution</module>
+        <module>m10-performance/starter</module>
+        <module>m10-performance/solution</module>
+        <module>m11-web-jakarta/starter</module>
+        <module>m11-web-jakarta/solution</module>
+        <module>m12-testing/starter</module>
+        <module>m12-testing/solution</module>
+        <module>m13-final-project/starter</module>
+        <module>m13-final-project/solution</module>
+    </modules>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <hibernate.version>6.6.4.Final</hibernate.version>
+        <postgresql.version>42.7.4</postgresql.version>
+        <logback.version>1.5.12</logback.version>
+        <junit.version>5.11.3</junit.version>
+        <testcontainers.version>1.21.3</testcontainers.version>
+        <flyway.version>10.20.1</flyway.version>
+        <tomcat.version>10.1.34</tomcat.version>
+        <jackson.version>2.18.2</jackson.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-core</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jsr310</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- Спільні залежності для всіх модулів -->
+    <dependencies>
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+            <version>${hibernate.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

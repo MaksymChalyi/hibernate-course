@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Три persistence unit — по одному на стратегію наслідування.
+    Кожен у власній схемі, тому однакові імена таблиць і класів (Payment) не конфліктують.
+-->
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
+
+    <persistence-unit name="single-table" transaction-type="RESOURCE_LOCAL">
+        <class>ua.minibank.common.BaseEntity</class>
+        <class>ua.minibank.singletable.Payment</class>
+        <class>ua.minibank.singletable.CardPayment</class>
+        <class>ua.minibank.singletable.SepaPayment</class>
+        <exclude-unlisted-classes>true</exclude-unlisted-classes>
+        <properties>
+            <property name="jakarta.persistence.jdbc.url" value="jdbc:postgresql://localhost:5432/minibank?currentSchema=m08_single"/>
+            <property name="jakarta.persistence.jdbc.user" value="minibank"/>
+            <property name="jakarta.persistence.jdbc.password" value="minibank"/>
+            <property name="hibernate.default_schema" value="m08_single"/>
+            <property name="hibernate.hbm2ddl.create_namespaces" value="true"/>
+            <property name="hibernate.hbm2ddl.auto" value="create"/>
+            <property name="hibernate.format_sql" value="true"/>
+        </properties>
+    </persistence-unit>
+
+    <persistence-unit name="joined" transaction-type="RESOURCE_LOCAL">
+        <class>ua.minibank.common.BaseEntity</class>
+        <class>ua.minibank.joined.Payment</class>
+        <class>ua.minibank.joined.CardPayment</class>
+        <class>ua.minibank.joined.SepaPayment</class>
+        <exclude-unlisted-classes>true</exclude-unlisted-classes>
+        <properties>
+            <property name="jakarta.persistence.jdbc.url" value="jdbc:postgresql://localhost:5432/minibank?currentSchema=m08_joined"/>
+            <property name="jakarta.persistence.jdbc.user" value="minibank"/>
+            <property name="jakarta.persistence.jdbc.password" value="minibank"/>
+            <property name="hibernate.default_schema" value="m08_joined"/>
+            <property name="hibernate.hbm2ddl.create_namespaces" value="true"/>
+            <property name="hibernate.hbm2ddl.auto" value="create"/>
+            <property name="hibernate.format_sql" value="true"/>
+        </properties>
+    </persistence-unit>
+
+    <persistence-unit name="table-per-class" transaction-type="RESOURCE_LOCAL">
+        <class>ua.minibank.common.BaseEntity</class>
+        <class>ua.minibank.tableperclass.Payment</class>
+        <class>ua.minibank.tableperclass.CardPayment</class>
+        <class>ua.minibank.tableperclass.SepaPayment</class>
+        <exclude-unlisted-classes>true</exclude-unlisted-classes>
+        <properties>
+            <property name="jakarta.persistence.jdbc.url" value="jdbc:postgresql://localhost:5432/minibank?currentSchema=m08_tpc"/>
+            <property name="jakarta.persistence.jdbc.user" value="minibank"/>
+            <property name="jakarta.persistence.jdbc.password" value="minibank"/>
+            <property name="hibernate.default_schema" value="m08_tpc"/>
+            <property name="hibernate.hbm2ddl.create_namespaces" value="true"/>
+            <property name="hibernate.hbm2ddl.auto" value="create"/>
+            <property name="hibernate.format_sql" value="true"/>
+        </properties>
+    </persistence-unit>
+</persistence>

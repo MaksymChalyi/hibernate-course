@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
+
+    <persistence-unit name="minibank" transaction-type="RESOURCE_LOCAL">
+
+        <!-- TODO 2a: вкажи клас entity: <class>ua.minibank.Customer</class> -->
+
+        <exclude-unlisted-classes>true</exclude-unlisted-classes>
+
+        <properties>
+            <property name="jakarta.persistence.jdbc.url" value="jdbc:postgresql://localhost:5432/minibank?currentSchema=m01"/>
+            <property name="jakarta.persistence.jdbc.user" value="minibank"/>
+            <property name="jakarta.persistence.jdbc.password" value="minibank"/>
+
+            <!-- Схема модуля: Hibernate створить її, якщо її ще немає -->
+            <property name="hibernate.default_schema" value="m01"/>
+            <property name="hibernate.hbm2ddl.create_namespaces" value="true"/>
+
+            <!-- TODO 2b: hibernate.hbm2ddl.auto = create (перестворювати таблиці при кожному запуску) -->
+
+            <!-- TODO 2c: hibernate.format_sql = true (SQL у логах буде відформатований).
+                 Сам SQL логується через logger org.hibernate.SQL у logback.xml -->
+        </properties>
+    </persistence-unit>
+</persistence>

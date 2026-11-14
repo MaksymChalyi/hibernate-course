@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
+
+    <!--
+        Значення підключення тут — для локального запуску.
+        Тести перевизначають URL, користувача і пароль на контейнер Testcontainers (PostgresTestBase).
+    -->
+    <persistence-unit name="minibank" transaction-type="RESOURCE_LOCAL">
+        <class>ua.minibank.domain.Customer</class>
+        <class>ua.minibank.domain.Account</class>
+        <class>ua.minibank.domain.Transaction</class>
+        <exclude-unlisted-classes>true</exclude-unlisted-classes>
+
+        <properties>
+            <property name="jakarta.persistence.jdbc.url" value="jdbc:postgresql://localhost:5432/minibank?currentSchema=m12"/>
+            <property name="jakarta.persistence.jdbc.user" value="minibank"/>
+            <property name="jakarta.persistence.jdbc.password" value="minibank"/>
+
+            <property name="hibernate.hbm2ddl.auto" value="validate"/>
+            <property name="hibernate.connection.pool_size" value="20"/>
+            <property name="hibernate.generate_statistics" value="true"/>
+        </properties>
+    </persistence-unit>
+</persistence>

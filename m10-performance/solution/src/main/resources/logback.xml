@@ -1,0 +1,19 @@
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{24} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- SQL, який виконує Hibernate -->
+    <!-- У цьому модулі вимкнено: 100 000 INSERT у консолі сповільнять імпорт у рази.
+         Для перевірки batching на малому файлі постав DEBUG. -->
+    <logger name="org.hibernate.SQL" level="INFO"/>
+
+    <!-- Значення параметрів SQL. Розкоментуй, щоб бачити, що підставляється замість "?" -->
+    <!-- <logger name="org.hibernate.orm.jdbc.bind" level="TRACE"/> -->
+
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
