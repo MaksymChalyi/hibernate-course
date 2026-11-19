@@ -6,7 +6,7 @@
 
     <persistence-unit name="minibank" transaction-type="RESOURCE_LOCAL">
 
-        <!-- TODO 2a: вкажи клас entity: <class>ua.minibank.Customer</class> -->
+        <class>ua.minibank.Customer</class>
 
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
 
@@ -19,7 +19,7 @@
             <property name="hibernate.default_schema" value="m01"/>
             <property name="hibernate.hbm2ddl.create_namespaces" value="true"/>
 
-            <!-- TODO 2b: hibernate.hbm2ddl.auto = create (перестворювати таблиці при кожному запуску) -->
+            <property name="hibernate.hbm2ddl.auto" value="create"/>
 
             <!-- TODO 2c: hibernate.format_sql = true (SQL у логах буде відформатований).
                  Сам SQL логується через logger org.hibernate.SQL у logback.xml -->
