@@ -32,10 +32,21 @@ public class Account {
     private BigDecimal balance;
 
     /*
-     * TODO 1. Додай optimistic locking: поле Long version з анотацією @Version.
-     * Потім подивись у лог, як змінився UPDATE.
-     * Тест versionConflictIsDetected зараз падає: друге списання мовчки перезаписує перше.
+     * Завдання 1. Optimistic locking: поле версії.
+     *
+     * Додай поле:
+     *     @Version
+     *     private Long version;
+     * (import jakarta.persistence.Version) і getter getVersion(). Сеттер НЕ потрібен — версію змінює лише Hibernate.
+     *
+     * Що зміниться: кожен UPDATE стане таким:
+     *     update accounts set balance = ?, version = 6 where id = ? and version = 5
+     * Якщо хтось уже змінив рядок, версія в базі інша → UPDATE змінить 0 рядків →
+     * Hibernate кине OptimisticLockException замість того, щоб мовчки перезаписати чужі зміни.
+     *
+     * Перевірка: тест «1 · конфлікт версій виявляється». Подивись у консолі на "and version=?".
      */
+    // TODO 1 Додати поле @Version private Long version і getter getVersion()
 
     protected Account() {
     }

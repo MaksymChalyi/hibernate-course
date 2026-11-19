@@ -5,13 +5,18 @@
              version="3.0">
 
     <persistence-unit name="minibank" transaction-type="RESOURCE_LOCAL">
+        <!-- Entity -->
         <class>ua.minibank.Customer</class>
         <class>ua.minibank.Account</class>
+        <!-- Вбудовувані класи (@Embeddable) теж перелічуємо -->
         <class>ua.minibank.Address</class>
-        <!-- Резерв: розкоментуй, коли Money стане @Embeddable -->
+
+        <!-- TODO 4.4 (резерв) Розкоментуй рядок нижче, коли Money стане @Embeddable -->
         <!-- <class>ua.minibank.Money</class> -->
-        <!-- Домашнє завдання: розкоментуй, коли конвертер буде готовий -->
+
+        <!-- TODO 5.4 (ДЗ) Розкоментуй рядок нижче, коли CurrencyConverter буде готовий -->
         <!-- <class>ua.minibank.CurrencyConverter</class> -->
+
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
 
         <properties>

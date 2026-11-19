@@ -3,6 +3,7 @@ package ua.minibank;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@DisplayName("Модуль 7 · Запити")
 class ReportRepositoryTest {
 
     private static final Instant Q1_FROM = DemoData.kyiv("2026-01-01T00:00");
@@ -41,6 +43,7 @@ class ReportRepositoryTest {
     // ---------- Обов'язкова частина ----------
 
     @Test
+    @DisplayName("1 · оборот за січень (межі за Києвом)")
     void januaryTurnoverUsesKyivTime() {
         MonthlyTurnover january = repository.monthlyTurnover("UA01", YearMonth.of(2026, 1));
 
@@ -51,6 +54,7 @@ class ReportRepositoryTest {
     }
 
     @Test
+    @DisplayName("1 · оборот за лютий")
     void februaryTurnover() {
         MonthlyTurnover february = repository.monthlyTurnover("UA01", YearMonth.of(2026, 2));
 
@@ -60,6 +64,7 @@ class ReportRepositoryTest {
     }
 
     @Test
+    @DisplayName("1 · місяць без операцій — нулі")
     void emptyMonthGivesZeros() {
         MonthlyTurnover march = repository.monthlyTurnover("UA01", YearMonth.of(2026, 3));
 
@@ -69,6 +74,7 @@ class ReportRepositoryTest {
     }
 
     @Test
+    @DisplayName("2 · перша сторінка — найновіші операції")
     void firstPageHasNewestTransactions() {
         List<TransactionView> page = repository.findTransactions("UA01", 0, 3);
 
@@ -77,6 +83,7 @@ class ReportRepositoryTest {
     }
 
     @Test
+    @DisplayName("2 · остання сторінка — решта")
     void lastPageHasTheRest() {
         List<TransactionView> page = repository.findTransactions("UA01", 2, 3);
 
@@ -87,6 +94,7 @@ class ReportRepositoryTest {
     // ---------- Домашнє завдання ----------
 
     @Test
+    @DisplayName("3 (ДЗ) · топ клієнтів у UAH за квартал")
     void topCustomersInUahForQuarter() {
         List<CustomerSpending> top = repository.topCustomersBySpending(CurrencyCode.UAH, Q1_FROM, Q1_TO, 10);
 
@@ -98,6 +106,7 @@ class ReportRepositoryTest {
     }
 
     @Test
+    @DisplayName("4 (ДЗ) · native SQL дає той самий результат")
     void nativeQueryGivesTheSameResult() {
         List<CustomerSpending> jpql = repository.topCustomersBySpending(CurrencyCode.UAH, Q1_FROM, Q1_TO, 10);
         List<CustomerSpending> sql = repository.topCustomersBySpendingNative(CurrencyCode.UAH, Q1_FROM, Q1_TO, 10);
@@ -110,6 +119,7 @@ class ReportRepositoryTest {
     }
 
     @Test
+    @DisplayName("3 (ДЗ) · limit обмежує кількість")
     void limitIsApplied() {
         List<CustomerSpending> top = repository.topCustomersBySpending(CurrencyCode.UAH, Q1_FROM, Q1_TO, 1);
 
@@ -120,6 +130,7 @@ class ReportRepositoryTest {
     // ---------- Резерв ----------
 
     @Test
+    @DisplayName("5 (резерв) · фільтр: рахунок + тип + мін. сума")
     void filterByAccountTypeAndMinAmount() {
         TransactionFilter filter = TransactionFilter.empty()
                 .withAccount("UA01")
@@ -133,16 +144,19 @@ class ReportRepositoryTest {
     }
 
     @Test
+    @DisplayName("5 (резерв) · фільтр лише за валютою")
     void filterByCurrencyOnly() {
         assertEquals(2, repository.search(TransactionFilter.empty().withCurrency(CurrencyCode.USD)).size());
     }
 
     @Test
+    @DisplayName("5 (резерв) · порожній фільтр — усі операції")
     void emptyFilterReturnsEverything() {
         assertEquals(14, repository.search(TransactionFilter.empty()).size());
     }
 
     @Test
+    @DisplayName("6 (резерв) · накопичений залишок (window function)")
     void runningBalanceEndsWithTotalMovement() {
         List<BalancePoint> points = repository.runningBalance("UA01");
 
@@ -153,6 +167,7 @@ class ReportRepositoryTest {
     }
 
     @Test
+    @DisplayName("7 (резерв) · bulk update йде повз Persistence Context")
     void bulkUpdateBypassesPersistenceContext() {
         try (EntityManager em = emf.createEntityManager()) {
             Account loadedBefore = em.createQuery("select a from Account a where a.number = 'UA01'", Account.class)

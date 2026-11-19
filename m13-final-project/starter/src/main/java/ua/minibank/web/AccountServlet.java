@@ -14,6 +14,8 @@ import java.io.IOException;
  */
 public class AccountServlet extends JsonServlet {
 
+    // TODO 1.3 Читати параметри type, from, to, minAmount, maxAmount → TransactionFilter.
+    //          Некоректне значення → IllegalArgumentException (JsonServlet перетворить на 400). Етап 1 у ЗАВДАННЯ.md.
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
         String path = request.getPathInfo(); // "/1" або "/1/transactions"

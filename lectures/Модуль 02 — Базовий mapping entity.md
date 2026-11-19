@@ -1,10 +1,14 @@
 # Модуль 2. Базовий mapping entity
 
-**Мета:** правильно змапити таблицю на клас з урахуванням особливостей фінансових даних.
+**Що вмітимеш після модуля:**
+- описувати анотаціями, яка таблиця має вийти з класу: імена колонок, довжини, `NOT NULL`, `UNIQUE`;
+- обирати спосіб генерації id і пояснювати, чому `SEQUENCE` кращий за `IDENTITY`;
+- правильно зберігати гроші, enum і дати;
+- виносити групу полів в окремий клас без окремої таблиці (`@Embeddable`).
 
 **Код:** `m02-entity-mapping/starter` → `m02-entity-mapping/solution`
 
-**Критерій завершення:** учень пояснює, чому для `Account.balance` обрано `BigDecimal`, а для id — `SEQUENCE`.
+**Що треба пам'ятати з модуля 1:** `@Entity`, `@Id`, `@Column`, `persistence.xml`, `hbm2ddl.auto = create`, де дивитися SQL у консолі.
 
 ---
 
@@ -12,66 +16,121 @@
 
 | Блок | Час | Що робимо |
 |---|---|---|
-| Розбір ДЗ | 10 хв | DAO учня на Hibernate, лог з параметрами |
-| Теорія | 25 хв | Анотації колонок, вимоги до entity, генерація id, гроші, enum, `@Embeddable` |
-| Практика | 25 хв | TODO 1–3: `Customer`, `Address`, `Account` |
-| **Резерв** | 30 хв | UUID, дати й часові пояси, `Money`, `@Transient`, `AttributeConverter` |
+| Розбір ДЗ | 10 хв | `findByEmail` на JDBC і Hibernate |
+| Теорія | 25 хв | Частини 1–5 |
+| Практика | 25 хв | Завдання 1–3 |
+| **Резерв** | 30 хв | Частина 6, завдання 4 (`Money`) |
 
 ---
 
 ## Розбір домашнього завдання (10 хв)
 
-- Чи закривається `EntityManager` у кожному методі?
-- Чи є rollback при помилці в методах запису?
-- Чи використано JPQL з іменами класів, а не таблиць?
-- Чи не потрапили в лог із параметрами чутливі дані? Обговори, чому в production цей логер вимкнений.
-
----
-
-## Теорія (25 хв)
-
-### 1. Анотації колонок (4 хв)
-
 ```java
-@Entity
-@Table(name = "customers")
-public class Customer {
-    @Column(name = "first_name", nullable = false, length = 100)
-    private String firstName;
-
-    @Column(nullable = false, unique = true)
-    private String email;
+public Optional<Customer> findByEmail(String email) {
+    try (EntityManager em = emf.createEntityManager()) {
+        return em.createQuery("select c from Customer c where c.email = :email", Customer.class)
+                .setParameter("email", email)
+                .getResultStream()
+                .findFirst();
+    }
 }
 ```
 
-| Атрибут | Що робить | Коли спрацьовує |
+- `:email` — **іменований параметр**. Те саме, що `?` у JDBC, але з назвою. Значення передається окремо від запиту — захист від SQL injection так само працює.
+- Чому не `getSingleResult()`? Якщо клієнта немає, він кидає `NoResultException`. `getResultStream().findFirst()` повертає `Optional`.
+
+---
+
+# Частина 1. Що Hibernate робить з анотаціями
+
+У модулі 1 ми побачили, що Hibernate з класу `Customer` згенерував `create table`. Сьогодні керуємо цим детально.
+
+```
+ Java-клас з анотаціями  ──▶  Hibernate читає анотації  ──▶  create table ... (hbm2ddl = create)
+                                                        ──▶  insert / select / update з правильними колонками
+```
+
+Одні й ті самі анотації працюють **двічі**:
+1. При старті — щоб створити таблицю (лише коли `hbm2ddl.auto = create`).
+2. При кожній операції — щоб знати, у яку колонку писати яке поле.
+
+Деякі атрибути впливають лише на пункт 1. Наприклад, `length = 100`: Hibernate створить `varchar(100)`, але **не перевіряє** довжину перед `INSERT`. Якщо записати 150 символів, помилку дасть сама база.
+
+## 1.1. @Column — повна картина
+
+```java
+@Column(name = "first_name", nullable = false, length = 100)
+private String firstName;
+```
+
+| Атрибут | За замовчуванням | Що робить | Впливає на |
+|---|---|---|---|
+| `name` | ім'я поля | Ім'я колонки | DDL і SQL |
+| `nullable` | `true` | `false` → `NOT NULL` | DDL; Hibernate також перевіряє перед INSERT |
+| `unique` | `false` | `UNIQUE` | Лише DDL |
+| `length` | 255 | `varchar(length)` | Лише DDL |
+| `precision`, `scale` | залежить від типу | `numeric(precision, scale)` | Лише DDL |
+| `updatable` | `true` | `false` → колонки не буде в `UPDATE` | SQL |
+| `insertable` | `true` | `false` → колонки не буде в `INSERT` | SQL |
+
+### Пастка: імена колонок
+
+«Чистий» Hibernate **не** перетворює `firstName` на `first_name`. Без `@Column(name = ...)` колонка називатиметься `firstname`. Тому для полів з кількох слів `name` пишемо завжди.
+
+> У статтях про Spring Boot часто пишуть, що `@Column(name)` не потрібен. Це правда лише для Spring Boot: він вмикає автоматичне перетворення. У нашому курсі Spring немає.
+
+## 1.2. Вимоги до entity-класу
+
+| Вимога | Чому |
+|---|---|
+| Є `@Id` | Hibernate має відрізняти об'єкти і шукати їх |
+| Конструктор без аргументів (`protected` або `public`) | Hibernate створює порожній об'єкт, потім заповнює поля |
+| Клас не `final`, методи не `final` | Hibernate створює підкласи-«заглушки» (proxy) для лінивого завантаження (модуль 6) |
+
+### Чому `record` не може бути entity
+
+```java
+public record Customer(Long id, String firstName) { }   // не можна як @Entity
+```
+
+У record усі поля `final` і немає конструктора без аргументів. Hibernate не може ні створити порожній об'єкт, ні змінити поля. Records стануть у пригоді пізніше — для **DTO** (модулі 6–7).
+
+### Field access: поля чи методи?
+
+Якщо `@Id` стоїть **на полі**, Hibernate читає і пише **поля напряму** і не дивиться на getter-и. Тому метод `getFullName()` не стане колонкою.
+
+---
+
+# Частина 2. Генерація id: IDENTITY vs SEQUENCE
+
+## 2.1. Два способи отримати id від бази
+
+**IDENTITY** — колонка сама дає наступне число під час `INSERT` (як `auto_increment` у MySQL).
+
+```sql
+create table customers (id bigint generated by default as identity, ...);
+insert into customers (first_name, ...) values ('Olena', ...);   -- id = 1 з'явиться тут
+```
+
+**SEQUENCE** — окремий об'єкт бази, лічильник. Число з нього можна взяти **до** `INSERT`:
+
+```sql
+create sequence customer_seq start with 1 increment by 50;
+select nextval('customer_seq');                                   -- 1
+insert into customers (id, first_name, ...) values (1, 'Olena', ...);
+```
+
+## 2.2. Чому це важливо для Hibernate
+
+Після `em.persist(customer)` Hibernate мусить **одразу** знати id: він кладе об'єкт у свою внутрішню «мапу» за ключем id (модуль 3).
+
+| | IDENTITY | SEQUENCE |
 |---|---|---|
-| `name` | Ім'я колонки | Завжди |
-| `nullable = false` | `NOT NULL` у DDL, Hibernate перевіряє перед INSERT | DDL і runtime |
-| `length` | `varchar(100)` | Лише DDL |
-| `unique = true` | Unique constraint | Лише DDL |
-| `precision`, `scale` | `numeric(19,4)` | Лише DDL |
+| Як Hibernate дізнається id | Мусить виконати `INSERT` **одразу** на `persist` | Бере число з послідовності, `INSERT` — пізніше |
+| Можна відправити 50 `INSERT` одним пакетом (batching, модуль 10) | Ні | Так |
+| Звернень до бази на 50 нових клієнтів | 50 `INSERT` по одному | 1 `nextval` + 50 `INSERT` пакетом |
 
-Важливо: `length` і `unique` впливають **лише на генерацію схеми**. Якщо схему створює Flyway, Hibernate не перевіряє довжину рядка — перевіряє база.
-
-### 2. Вимоги до entity-класу (4 хв)
-
-- конструктор без аргументів (може бути `protected`);
-- клас не `final`, методи не `final` — Hibernate створює підкласи-proxy для lazy loading (модуль 6);
-- є `@Id`.
-
-**Чому records не підходять як entity:** record `final`, поля `final`, немає конструктора без аргументів. Hibernate не може створити proxy і не може змінювати поля при dirty checking. Records чудово підходять для **DTO** — побачимо в модулі 6.
-
-**Field access:** якщо `@Id` стоїть на полі, Hibernate читає й пише поля напряму, а не через getter/setter. Тому метод `getFullName()` не стає колонкою.
-
-### 3. Генерація id: `IDENTITY` vs `SEQUENCE` (7 хв)
-
-| | `IDENTITY` | `SEQUENCE` |
-|---|---|---|
-| Хто генерує | Колонка `generated as identity` | Окремий об'єкт бази — послідовність |
-| Коли id відомий | Лише після INSERT | До INSERT |
-| JDBC batching вставок | **Вимикається** | Працює |
-| Звернень до бази на 50 нових рядків | 50 INSERT, кожен окремо | 1 `nextval` + 50 INSERT пачкою |
+## 2.3. allocationSize = 50
 
 ```java
 @Id
@@ -80,115 +139,288 @@ public class Customer {
 private Long id;
 ```
 
-**`allocationSize = 50`**: Hibernate бере з послідовності одне значення і сам видає наступні 50 id з пам'яті. Тому id можуть мати «дірки» (1, 2, 51, 52…) — це нормально, id не повинні бути щільними.
+Розбираємо:
+- `generator = "customer_seq"` у `@GeneratedValue` — посилання на генератор за **ім'ям у Java**;
+- `name = "customer_seq"` у `@SequenceGenerator` — це саме ім'я в Java;
+- `sequenceName = "customer_seq"` — ім'я послідовності **в базі**;
+- `allocationSize = 50` — Hibernate бере з бази одне значення і сам видає наступні 50 id з пам'яті.
 
-Чому `IDENTITY` вимикає batching: після `persist` Hibernate мусить одразу знати id (щоб покласти об'єкт у Persistence Context). З `IDENTITY` id дає лише INSERT, тож Hibernate виконує INSERT негайно, по одному. Повернемось до цього в модулі 10.
+Як це виглядає:
 
-### 4. Гроші: тільки `BigDecimal` (5 хв)
-
-```java
-System.out.println(0.1 + 0.2);            // 0.30000000000000004
-new BigDecimal("0.1").add(new BigDecimal("0.2")); // 0.3
+```
+nextval → 1      Hibernate видає id: 1, 2, 3 … 50 без звернень до бази
+nextval → 51     Hibernate видає id: 51, 52 … 100
 ```
 
-`double` — двійковий дріб: 0.1 у ньому не представляється точно. Для грошей це неприйнятно.
+Тому послідовність у базі створюється з `increment by 50` — щоб наступний `nextval` дав 51, а не 2.
+
+**Наслідок:** id можуть бути з «дірками» (1, 2, 51, 52…), якщо застосунок перезапускався. Це нормально: id не зобов'язані йти підряд, вони лише унікальні.
+
+## 2.4. А UUID?
+
+UUID (`550e8400-e29b-41d4-a716-446655440000`) генерується в Java без бази і унікальний між різними системами. Мінуси: 16 байт замість 8, випадковий UUID повільніше вставляється в індекс, його незручно читати й диктувати. Розберемо в резерві.
+
+**Перевір себе:**
+1. Чому з `IDENTITY` не працює пакетна вставка?
+2. Що означає `allocationSize = 50`?
+3. Чи погано, що після клієнта з id 2 йде клієнт з id 51?
+
+---
+
+# Частина 3. Гроші: тільки BigDecimal
+
+## 3.1. Чому не double
+
+```java
+System.out.println(0.1 + 0.2);                 // 0.30000000000000004
+System.out.println(1.10 - 1.00);               // 0.10000000000000009
+```
+
+`double` зберігає число як **двійковий** дріб. Число 0.1 у двійковій системі — нескінченний дріб (як 1/3 = 0.333… у десятковій), тому зберігається приблизно. Для фізики це нормально, для грошей — ні: копійки «губляться» або з'являються з нізвідки.
+
+```java
+new BigDecimal("0.1").add(new BigDecimal("0.2"));   // 0.3 — точно
+```
+
+`BigDecimal` зберігає число як десяткове: ціле число цифр + позиція коми.
+
+## 3.2. Три правила BigDecimal
+
+**1. Створювати з рядка, не з double:**
+
+```java
+new BigDecimal("0.1");     // 0.1
+new BigDecimal(0.1);       // 0.1000000000000000055511151231257827021181583404541015625
+```
+
+**2. Порівнювати через `compareTo`, не `equals`:**
+
+```java
+new BigDecimal("100.0").equals(new BigDecimal("100.00"));        // false — різна кількість знаків
+new BigDecimal("100.0").compareTo(new BigDecimal("100.00")) == 0; // true
+```
+
+**3. BigDecimal незмінний** (як `String`): `balance.add(x)` повертає **новий** об'єкт.
+
+```java
+balance.add(amount);              // результат загубився
+balance = balance.add(amount);    // правильно
+```
+
+## 3.3. Колонка в базі
 
 ```java
 @Column(nullable = false, precision = 19, scale = 4)
-private BigDecimal balance;
+private BigDecimal balance;          // → numeric(19,4)
 ```
 
-- `precision = 19` — усього цифр, `scale = 4` — після коми. Максимум ~10¹⁵, з запасом для будь-якого рахунку.
-- 4 знаки замість 2 — для проміжних розрахунків (відсотки, курси валют), щоб не накопичувати округлення.
-- Порівнювати `BigDecimal` — через `compareTo`, не `equals`: `new BigDecimal("100.0").equals(new BigDecimal("100.00"))` повертає `false`.
-- Створювати з рядка: `new BigDecimal("0.1")`, не `new BigDecimal(0.1)`.
+- `precision = 19` — **усього** цифр: до 15 до коми і 4 після. Вистачить на будь-який рахунок.
+- `scale = 4` — знаків після коми. Чому 4, а не 2 (копійки)? Для проміжних розрахунків: відсотки, курси валют. Округлюємо до копійок лише в кінці.
+- Без `precision`/`scale` Hibernate створить `numeric(38,2)`.
 
-### 5. Enum: `STRING`, не `ORDINAL` (2 хв)
+**Перевір себе:**
+1. Що виведе `new BigDecimal("2.50").equals(new BigDecimal("2.5"))`?
+2. Чому `new BigDecimal(0.1)` — погана ідея?
+
+---
+
+# Частина 4. Enum і дати
+
+## 4.1. Enum: STRING чи ORDINAL
+
+```java
+public enum CustomerStatus { ACTIVE, BLOCKED, CLOSED }
+```
+
+| | `EnumType.ORDINAL` (за замовчуванням!) | `EnumType.STRING` |
+|---|---|---|
+| Що в базі | Номер: 0, 1, 2 | Текст: `'ACTIVE'` |
+| Читається в SQL | Ні: `where status = 1` — це що? | Так: `where status = 'BLOCKED'` |
+| Якщо додати `PENDING` на початок enum | **Усі збережені дані зсуваються**: заблоковані стають активними | Нічого не ламається |
+| Місце | Менше | Більше (неважливо) |
 
 ```java
 @Enumerated(EnumType.STRING)
 @Column(nullable = false, length = 20)
-private CustomerStatus status;   // у базі: 'ACTIVE'
+private CustomerStatus status;
 ```
 
-`ORDINAL` (за замовчуванням) зберігає номер константи: `ACTIVE = 0`, `BLOCKED = 1`. Додали `PENDING` на початок — усі збережені статуси зсунулися, і заблоковані клієнти стали активними. `STRING` займає більше місця, але читається в SQL і не ламається від перестановки.
+Правило: **завжди `STRING`**. Hibernate 6 ще й додає в таблицю `check (status in ('ACTIVE','BLOCKED','CLOSED'))` — база не дасть записати неіснуючий статус.
 
-### 6. `@Embeddable` — value object (3 хв)
+## 4.2. Дати й час
+
+| Java-тип | Що означає | Колонка PostgreSQL | Приклад |
+|---|---|---|---|
+| `LocalDate` | Календарна дата, без часу і зони | `date` | День народження |
+| `Instant` | Точний момент часу (UTC) | `timestamp with time zone` | Коли зареєструвався клієнт, коли пройшов переказ |
+| `LocalDateTime` | «Показання годинника» без зони | `timestamp` | Майже ніколи для банку |
+
+**Чому не `LocalDateTime` для моментів подій.** «2026-03-29 03:30» — о котрій це для клієнта в Києві і для сервера в Лондоні? Невідомо. А 29 березня в Україні переводять годинник: часу 03:30 того дня **не існує**. `Instant` — це однозначна точка на часовій шкалі, незалежна від зон.
+
+Правило: **моменти подій — `Instant`, календарні дати — `LocalDate`.**
 
 ```java
-@Embeddable
+@Column(name = "registered_at", nullable = false, updatable = false)
+private Instant registeredAt;     // updatable = false: дату реєстрації ніколи не оновлюємо
+
+@Column(name = "birth_date")
+private LocalDate birthDate;
+```
+
+**Перевір себе:**
+1. Що станеться з `ORDINAL`, якщо поміняти місцями `ACTIVE` і `BLOCKED` в enum?
+2. Який тип для моменту переказу коштів?
+
+---
+
+# Частина 5. @Embeddable: група полів без окремої таблиці
+
+## 5.1. Value object
+
+Адреса — це місто, вулиця й індекс. Окремо від клієнта вона не має сенсу і не потребує власного id. Таке поняття називають **value object** («об'єкт-значення»): він визначається лише значеннями полів. Інші приклади: гроші (сума + валюта), період (від — до), координати.
+
+Тримати місто, вулицю й індекс просто полями в `Customer` можна, але тоді логіка адреси розмазана по класу. Окремий клас `Address` — чистіше.
+
+## 5.2. Як це мапиться
+
+```java
+@Embeddable                                   // «вбудовуваний», НЕ @Entity
 public class Address {
-    @Column(name = "city", length = 100) private String city;
-    @Column(name = "street")             private String street;
+    @Column(length = 100)                 private String city;
+                                          private String street;
     @Column(name = "postal_code", length = 10) private String postalCode;
+    protected Address() { }
 }
 
 @Entity
 public class Customer {
-    @Embedded
-    private Address address;   // колонки city, street, postal_code у таблиці customers
+    @Embedded                                  // «вбудувати сюди»
+    private Address address;
 }
 ```
 
-Embeddable не має власного id і таблиці. Корисно для понять, які мають сенс лише разом: адреса, гроші (сума + валюта), період (від–до). Value object порівнюється за значенням, тому в `Address` є `equals`/`hashCode` по всіх полях.
+Результат у базі — **одна** таблиця:
+
+```
+customers
+id │ first_name │ ... │ city │ street         │ postal_code
+───┼────────────┼─────┼──────┼────────────────┼────────────
+ 1 │ Olena      │ ... │ Kyiv │ Khreshchatyk 1 │ 01001
+```
+
+| | `@Entity` | `@Embeddable` |
+|---|---|---|
+| Власна таблиця | Так | Ні, колонки в таблиці власника |
+| Власний id | Так | Ні |
+| Може існувати сам | Так | Ні, лише всередині entity |
+| Порівнюється | За id | За значеннями всіх полів (`equals` по полях) |
+
+Якщо всі колонки адреси в рядку `null`, Hibernate поверне `address = null`.
+
+**Перевір себе:**
+1. Скільки таблиць створить Hibernate для `Customer` з `Address`?
+2. Чому в `Address` немає `@Id`?
 
 ---
 
 ## Практика (25 хв)
 
-**TODO 1. `Customer`** (10 хв): усі анотації з коментаря в класі. Після запуску `Main` подивись у лозі DDL:
+**Важливо перед стартом.** У `persistence.xml` уже перелічені `Customer` і `Account`. Hibernate не стартує, поки **обидва** не стануть коректними entity. Тому порядок: завдання 1 → 2 → 3, і лише потім перший запуск. Якщо хочеш бачити результат раніше — тимчасово закоментуй `<class>ua.minibank.Account</class>` у `persistence.xml`.
+
+### Завдання 1. Customer (12 хв)
+
+Над класом у коді є таблиця «поле → колонка → тип → обмеження». Ідемо по кроках `TODO 1.1 … 1.9`.
+
+| Крок | Що | Код |
+|---|---|---|
+| 1.1 | Entity і таблиця | `@Entity` `@Table(name = "customers")` |
+| 1.2 | id з послідовності | три анотації з частини 2.3 |
+| 1.3 | Імена | `@Column(name = "first_name", nullable = false, length = 100)`, так само `last_name` |
+| 1.4 | Email | `@Column(nullable = false, unique = true)` |
+| 1.5 | Статус | `@Enumerated(EnumType.STRING)` + `@Column(nullable = false, length = 20)` |
+| 1.6 | Дата реєстрації | `@Column(name = "registered_at", nullable = false, updatable = false)` |
+| 1.7 | Дата народження | `@Column(name = "birth_date")` |
+| 1.8 | Адреса | `@Embedded` |
+| 1.9 | Конструктор | `protected Customer() { }` |
+
+### Завдання 2. Address (3 хв)
+
+`@Embeddable`, `@Column(length = 100)` над `city`, `@Column(name = "postal_code", length = 10)` над `postalCode`, `protected Address() { }`.
+
+### Завдання 3. Account (7 хв)
+
+| Крок | Що |
+|---|---|
+| 3.1 | `@Entity` `@Table(name = "accounts")` |
+| 3.2 | id з послідовності `account_seq`, `allocationSize = 50` |
+| 3.3 | `@Column(nullable = false, unique = true, length = 34)` над `number` |
+| 3.4 | `@Column(nullable = false, length = 3)` над `currency` |
+| 3.5 | `@Column(nullable = false, precision = 19, scale = 4)` над `balance` |
+| 3.6 | `protected Account() { }` |
+
+### Перевірка (3 хв)
+
+1. Запусти `Main`. У консолі має бути (скорочено):
 
 ```sql
-create sequence customer_seq start with 1 increment by 50
-create table customers (
-    birth_date date,
-    registered_at timestamp(6) with time zone not null,
-    ...
-    status varchar(20) not null check (status in ('ACTIVE','BLOCKED','CLOSED')),
+create sequence m02.account_seq start with 1 increment by 50
+create sequence m02.customer_seq start with 1 increment by 50
+create table m02.accounts (
+    balance numeric(19,4) not null,
+    id bigint not null,
+    currency varchar(3) not null,
+    number varchar(34) not null unique,
     ...
 )
+create table m02.customers (
+    birth_date date,
+    id bigint not null,
+    registered_at timestamp(6) with time zone not null,
+    status varchar(20) not null check (status in ('ACTIVE','BLOCKED','CLOSED')),
+    city varchar(100),
+    first_name varchar(100) not null,
+    ...
+    postal_code varchar(10),
+    street varchar(255),
+    ...
+)
+select nextval('m02.customer_seq')
+insert into m02.customers (...) values (...)
 ```
 
-Обговори: звідки `increment by 50`, звідки `check` для статусу.
+Знайди в цьому виводі кожну свою анотацію.
 
-**TODO 2. `Address`** (5 хв): `@Embeddable`, колонки, конструктор.
+2. Запусти `MappingTest`. Тести `1.x`, `2`, `3.x` — зелені. Тести `4 (резерв)` і `5 (ДЗ)` — червоні, це нормально.
 
-**TODO 3. `Account`** (10 хв): `SEQUENCE`, номер IBAN 34 символи, `balance numeric(19,4)`.
+3. Відкрий таблицю `m02.customers` у pgAdmin / DBeaver: колонка `status` містить `ACTIVE`, а не `0`.
 
-**Перевірка:** `MappingTest` — усі тести обов'язкової частини зелені. Тести `currencyIsStoredAsIsoCode` і `creditLimitUsesOverriddenColumns` — для резерву.
+**Якщо не працює:**
 
-Запитай учня: чому тест `balanceKeepsFourDigitsAfterPoint` порівнює через `compareTo`, а не `assertEquals(new BigDecimal(...), ...)`?
+| Помилка | Причина |
+|---|---|
+| `Could not determine recommended JdbcType for ... Address` | Немає `@Embeddable` над `Address` або `@Embedded` над полем |
+| `Unable to find sequence customer_seq` / тест 1.2 падає | Не збігаються `generator` і `name` у двох анотаціях |
+| Тест 1.5: у колонці `0` замість `ACTIVE` | Немає `@Enumerated(EnumType.STRING)` |
+| Тест 3.5: `numeric(38,2)` | Немає `precision`/`scale` |
+| Колонка `birthdate` замість `birth_date` | Немає `@Column(name = "birth_date")` |
 
 ---
 
-## Резерв (30 хв)
+# Частина 6. Резерв (30 хв)
 
-### UUID як id (5 хв)
+## 6.1. Money і @AttributeOverrides (15 хв, завдання 4)
 
-| Плюси | Мінуси |
-|---|---|
-| Генерується без бази, унікальний між системами | 16 байт замість 8 |
-| Не видає кількість записів (`/accounts/1042`) | Випадковий UUID v4 фрагментує B-tree індекс: вставки повільніші |
-| Зручно для розподілених систем | Незручно читати й диктувати |
+Сума без валюти — не гроші. Тому кредитний ліміт — `Money(amount, currency)`:
 
-Практичний компроміс: внутрішній `Long id` з `SEQUENCE` + окрема колонка `public_id UUID` для зовнішнього API. Або UUID v7 (впорядкований за часом), якщо потрібен лише UUID.
+```java
+@Embeddable
+public class Money {
+    @Column(precision = 19, scale = 4) private BigDecimal amount;
+    @Column(length = 3)                private Currency currency;
+}
+```
 
-### Дати й час (8 хв)
-
-| Тип | Що означає | Колонка PostgreSQL | Приклад |
-|---|---|---|---|
-| `LocalDate` | Календарна дата без часу і зони | `date` | День народження |
-| `Instant` | Точка на часовій шкалі (UTC) | `timestamp with time zone` | Момент операції |
-| `OffsetDateTime` | Момент + зсув від UTC | `timestamp with time zone` | Момент із зсувом клієнта |
-| `LocalDateTime` | Дата й час **без зони** | `timestamp` | Майже ніколи для банку |
-
-Правило: **моменти подій — `Instant`**, календарні дати — `LocalDate`. `LocalDateTime` для операцій — помилка: «2026-03-29 03:30» у Києві — це інший момент, ніж у Лондоні, а в день переходу на літній час такого часу може взагалі не бути.
-
-Межі «дня» чи «місяця» рахуються в конкретній зоні (`Europe/Kyiv`) — у модулі 7 побачимо, як UTC-межі псують місячний звіт.
-
-### `Money` і `@AttributeOverrides` (7 хв)
-
-Сума без валюти — не гроші. `Money(amount, currency)` як embeddable:
+Проблема: у `Account` уже є колонки `currency` і `balance`. Якщо просто вбудувати `Money`, колонки `amount` і `currency` з `Money` зіткнуться з полем `Account.currency`. Рішення — **перейменувати колонки** вбудованого об'єкта:
 
 ```java
 @Embedded
@@ -199,64 +431,86 @@ create table customers (
 private Money creditLimit;
 ```
 
-`@AttributeOverrides` потрібен, коли той самий embeddable використовується двічі в одній таблиці (наприклад, `balance` і `creditLimit`): без перейменування колонки збігатимуться.
+`name = "amount"` — ім'я **поля в класі Money**. `column = ...` — колонка, яка з'явиться в `accounts`.
 
-### `@Transient` і `AttributeConverter` (10 хв)
+Кроки в коді: `TODO 4.1 … 4.4`. Перевірка: тест «4 (резерв)».
 
-`@Transient` — поле існує в Java, але не в базі. У starter `Account.creditLimit` позначене `@Transient`, поки учень не зробить `Money` вбудованим.
+## 6.2. @Transient (3 хв)
 
-`AttributeConverter` — власне перетворення значення:
+`@Transient` — «це поле не зберігати». У заготовці `creditLimit` позначене так, щоб Hibernate не падав, поки `Money` не готовий. Інші приклади: кеш обчисленого значення, тимчасовий прапорець.
+
+## 6.3. UUID як id (5 хв)
+
+| Плюси | Мінуси |
+|---|---|
+| Генерується без бази | 16 байт замість 8 |
+| Унікальний між системами | Випадковий UUID v4 фрагментує індекс — вставки повільніші |
+| Не видає кількість записів (`/accounts/1042` підказує, що рахунків ~1000) | Незручно читати |
+
+Практичний компроміс у банках: внутрішній `Long id` з `SEQUENCE` для зв'язків і окрема колонка `public_id uuid` для зовнішнього API.
+
+## 6.4. AttributeConverter (7 хв, підготовка до ДЗ)
+
+Конвертер — «як перетворити значення поля на значення колонки і назад»:
 
 ```java
 @Converter
 public class CurrencyConverter implements AttributeConverter<Currency, String> {
     public String convertToDatabaseColumn(Currency c) { return c == null ? null : c.getCurrencyCode(); }
-    public Currency convertToEntityAttribute(String code) { return code == null ? null : Currency.getInstance(code); }
+    public Currency convertToEntityAttribute(String s) { return s == null ? null : Currency.getInstance(s); }
 }
 
 @Convert(converter = CurrencyConverter.class)
 private Currency currency;
 ```
 
-Hibernate 6 мапить `java.util.Currency` і без конвертера. Конвертер потрібен, коли формат у базі нестандартний: `'Y'/'N'` замість boolean, сума в копійках, нормалізований номер телефону.
+Коли потрібен у реальних проєктах: `'Y'/'N'` замість `boolean` у старій базі; сума в копійках (`long`) замість `BigDecimal`; телефон, що зберігається лише цифрами.
+
+---
+
+## Словник
+
+| Термін | Простими словами |
+|---|---|
+| Mapping | Опис відповідності «клас ⇄ таблиця, поле ⇄ колонка» |
+| DDL | SQL, що створює структуру: `create table`, `create sequence` |
+| Послідовність (sequence) | Лічильник у базі, що видає наступне число |
+| allocationSize | Скільки id Hibernate видає з пам'яті на одне звернення до послідовності |
+| Value object | Об'єкт без id, що визначається значеннями полів |
+| `@Embeddable` | Клас, поля якого вбудовуються в таблицю власника |
 
 ---
 
 ## Контрольні питання
 
-1. Чому `IDENTITY` вимикає batching вставок?
-   *Id відомий лише після INSERT, тож Hibernate виконує кожен INSERT одразу після `persist`.*
+1. Чому `SEQUENCE` кращий за `IDENTITY` для Hibernate?
+   *Id відомий до INSERT, тому можлива пакетна вставка.*
 2. Що означає `allocationSize = 50`?
-   *Одне звернення до послідовності дає Hibernate діапазон із 50 id.*
-3. Чому не `double` для грошей?
-   *Двійковий дріб не представляє точно десяткові частки: 0.1 + 0.2 ≠ 0.3.*
-4. Що станеться з `ORDINAL`, якщо додати нову константу на початок enum?
-   *Усі збережені значення зсунуться і означатимуть інші статуси.*
-5. Чи стане метод `getFullName()` колонкою?
-   *Ні: при field access Hibernate мапить поля, а не методи.*
-6. Чим `Instant` відрізняється від `LocalDateTime`?
-   *`Instant` — конкретний момент; `LocalDateTime` — «показання годинника» без зони, яке в різних зонах означає різні моменти.*
+   *Одне звернення до послідовності дає 50 id.*
+3. Чому гроші — `BigDecimal`, а не `double`?
+   *`double` не представляє точно десяткові дроби.*
+4. Як правильно порівнювати два `BigDecimal`?
+   *`compareTo(...) == 0`.*
+5. Що станеться з `EnumType.ORDINAL` після додавання константи на початок enum?
+   *Збережені значення почнуть означати інші статуси.*
+6. Чому для моменту переказу `Instant`, а не `LocalDateTime`?
+   *`Instant` — однозначний момент; `LocalDateTime` без зони неоднозначний.*
+7. Чим `@Embeddable` відрізняється від `@Entity`?
+   *Немає власної таблиці й id, колонки в таблиці власника.*
+8. Чи з'явиться колонка для методу `getFullName()`?
+   *Ні: при field access Hibernate мапить поля.*
 
 ---
 
-## Домашнє завдання
+## Домашнє завдання (завдання 5)
 
-- [ ] Реалізувати `CurrencyConverter` і підключити до `Account.currency` (`@Convert`), розкоментувати в `persistence.xml`. Тест `currencyIsStoredAsIsoCode` має бути зеленим.
-- [ ] Альтернатива: конвертер `PhoneNumberConverter`, що зберігає номер лише цифрами (`380671234567`), а віддає у форматі `+380 67 123 45 67`.
-- [ ] Відповісти письмово: чому Hibernate не створює колонку для `getFullName()`?
-
-## Типові помилки
-
-| Симптом | Причина |
-|---|---|
-| `Could not determine recommended JdbcType for Money` | Поле типу `Money` без `@Embedded`/`@Embeddable` |
-| У таблиці `status integer` | Забули `@Enumerated(EnumType.STRING)` |
-| `numeric(38,2)` замість `numeric(19,4)` | Не вказали `precision`/`scale` |
-| `PropertyValueException: not-null property references a null` | `nullable = false`, а значення `null` |
+- [ ] Реалізувати `CurrencyConverter` (кроки `TODO 5.1 … 5.4` у коді): `@Converter`, обидва методи з обробкою `null`, `@Convert` над `Account.currency`, рядок у `persistence.xml`.
+- [ ] Тести «5 (ДЗ) …» зелені.
+- [ ] Відповісти письмово: чому для `Address` потрібен `equals` за всіма полями, а для `Customer` — ні?
 
 ## Джерела
 
 - [Hibernate User Guide: Domain Model](https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#domain-model)
 - [Hibernate User Guide: Identifier generators](https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#identifiers-generators)
-- [PostgreSQL: Date/Time Types](https://www.postgresql.org/docs/16/datatype-datetime.html)
 - [PostgreSQL: Numeric Types](https://www.postgresql.org/docs/16/datatype-numeric.html)
+- [PostgreSQL: Date/Time Types](https://www.postgresql.org/docs/16/datatype-datetime.html)

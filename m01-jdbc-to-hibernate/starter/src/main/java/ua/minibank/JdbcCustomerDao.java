@@ -11,11 +11,22 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * DAO на чистому JDBC — так, як учень уже вміє.
- * Порахуй рядки: майже весь код тут — ручне перетворення ResultSet у Customer і назад.
+ * DAO (Data Access Object) на чистому JDBC.
+ *
+ * DAO — клас, який ховає роботу з базою: решта програми викликає save/findById/findAll
+ * і нічого не знає про SQL, Connection і ResultSet.
+ *
+ * Чотири об'єкти JDBC, які тут використовуються:
+ *   Connection        — відкрите з'єднання з базою (як відкритий дзвінок).
+ *   PreparedStatement — SQL-запит із місцями "?" для значень.
+ *   ResultSet         — результат SELECT: курсор, який іде по рядках.
+ *   SQLException      — будь-яка помилка бази (checked exception, його треба ловити).
+ *
+ * Усі ці об'єкти треба закривати. try-with-resources закриває їх сам, навіть якщо сталася помилка.
  */
 public class JdbcCustomerDao {
 
+    /** Створює схему і таблицю, якщо їх ще немає. Statement без параметрів — бо в SQL немає "?". */
     public void createTableIfNotExists() {
         try (Connection c = connect(); Statement st = c.createStatement()) {
             st.execute("create schema if not exists m01");
@@ -31,15 +42,21 @@ public class JdbcCustomerDao {
         }
     }
 
+    /**
+     * INSERT. "returning id" — можливість PostgreSQL: повернути згенерований id одразу з INSERT.
+     * Тому тут executeQuery (є результат), а не executeUpdate.
+     */
     public Customer save(Customer customer) {
         String sql = "insert into customers (first_name, last_name, email) values (?, ?, ?) returning id";
         try (Connection c = connect(); PreparedStatement ps = c.prepareStatement(sql)) {
+            // Значення підставляються замість "?" по порядку, нумерація з 1.
+            // Так база отримує дані окремо від тексту SQL — це захищає від SQL injection.
             ps.setString(1, customer.getFirstName());
             ps.setString(2, customer.getLastName());
             ps.setString(3, customer.getEmail());
             try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                customer.setId(rs.getLong(1));
+                rs.next();                       // перейти на перший (єдиний) рядок результату
+                customer.setId(rs.getLong(1));   // перша колонка результату — id
             }
             return customer;
         } catch (SQLException e) {
@@ -47,11 +64,13 @@ public class JdbcCustomerDao {
         }
     }
 
+    /** SELECT одного рядка. Optional — бо клієнта з таким id може не бути. */
     public Optional<Customer> findById(Long id) {
         String sql = "select id, first_name, last_name, email from customers where id = ?";
         try (Connection c = connect(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, id);
             try (ResultSet rs = ps.executeQuery()) {
+                // rs.next() повертає false, якщо рядків немає
                 return rs.next() ? Optional.of(map(rs)) : Optional.empty();
             }
         } catch (SQLException e) {
@@ -59,6 +78,7 @@ public class JdbcCustomerDao {
         }
     }
 
+    /** SELECT багатьох рядків: while (rs.next()) — пройти по всіх. */
     public List<Customer> findAll() {
         String sql = "select id, first_name, last_name, email from customers order by id";
         try (Connection c = connect();
@@ -74,6 +94,31 @@ public class JdbcCustomerDao {
         }
     }
 
+    /**
+     * Завдання 0 (розминка JDBC, до знайомства з Hibernate).
+     * Повернути кількість клієнтів у таблиці.
+     *
+     * SQL, який треба виконати:   select count(*) from customers
+     * Результат цього запиту — один рядок з однією колонкою, наприклад 3.
+     *
+     * Кроки (подивись, як зроблено findAll вище — тут те саме, тільки без циклу):
+     *   1. try (Connection c = connect();
+     *           PreparedStatement ps = c.prepareStatement("...SQL...");
+     *           ResultSet rs = ps.executeQuery()) {
+     *   2.     rs.next();              — перейти на єдиний рядок результату
+     *   3.     return rs.getLong(1);   — прочитати першу колонку як long
+     *      } catch (SQLException e) {
+     *   4.     throw new IllegalStateException("Не вдалося порахувати клієнтів", e);
+     *      }
+     *
+     * Перевірка: тест «0 · JDBC: count()» у JdbcCustomerDaoTest.
+     */
+    public long count() {
+        // TODO 0 Порахувати клієнтів запитом select count(*) from customers (кроки — у коментарі над методом)
+        throw new UnsupportedOperationException("TODO 0: count() — див. коментар над методом");
+    }
+
+    /** DELETE / UPDATE / INSERT без результату — executeUpdate, повертає кількість змінених рядків. */
     public void deleteById(Long id) {
         try (Connection c = connect(); PreparedStatement ps = c.prepareStatement("delete from customers where id = ?")) {
             ps.setLong(1, id);
@@ -83,15 +128,20 @@ public class JdbcCustomerDao {
         }
     }
 
+    /**
+     * Ручний mapping: рядок таблиці → Java-об'єкт. Саме цю роботу забере Hibernate.
+     * Колонки читаються за назвою: rs.getString("first_name").
+     */
     private Customer map(ResultSet rs) throws SQLException {
-        Customer customer = new Customer(
-                rs.getString("first_name"),
-                rs.getString("last_name"),
-                rs.getString("email"));
+        Customer customer = new Customer(rs.getString("first_name"), rs.getString("last_name"), rs.getString("email"));
         customer.setId(rs.getLong("id"));
         return customer;
     }
 
+    /**
+     * Нове з'єднання на кожен виклик — просто, але повільно: відкрити з'єднання з PostgreSQL коштує
+     * кілька мілісекунд. У реальних застосунках беруть з'єднання з пулу (HikariCP). Hibernate теж має пул.
+     */
     private Connection connect() throws SQLException {
         return DriverManager.getConnection(Db.URL, Db.USER, Db.PASSWORD);
     }

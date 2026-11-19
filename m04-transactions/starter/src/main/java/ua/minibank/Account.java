@@ -40,11 +40,18 @@ public class Account {
         this.balance = balance;
     }
 
-    /**
-     * TODO (домашнє завдання): якщо грошей не вистачає, кинути InsufficientFundsException.
-     * Питання: чому цю перевірку краще робити тут, а не в TransferService?
+    /*
+     * Завдання 2a (ДЗ). Не дозволити піти в мінус.
+     *
+     * Якщо balance < amount → throw new InsufficientFundsException(number, balance, amount);
+     * Порівнювати BigDecimal — тільки через compareTo:
+     *     balance.compareTo(amount) < 0     означає    balance < amount
+     *
+     * Питання: чому цю перевірку краще робити тут, в Account, а не в TransferService?
+     * (Підказка: хто ще в майбутньому може списувати гроші з рахунку?)
      */
     public void debit(BigDecimal amount) {
+        // TODO 2a (ДЗ) Кинути InsufficientFundsException, якщо грошей не вистачає
         balance = balance.subtract(amount);
     }
 

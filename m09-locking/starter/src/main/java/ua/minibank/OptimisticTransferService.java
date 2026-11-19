@@ -22,15 +22,34 @@ public class OptimisticTransferService {
         this.maxAttempts = maxAttempts;
     }
 
-    /**
-     * TODO 4 (домашнє завдання). Retry.
-     * Зараз при конфлікті версій переказ просто падає. Повторюй transferOnce, поки:
-     *   - не вдалося, і помилка — конфлікт версій (TransferSupport.isOptimisticLockFailure);
-     *   - кількість спроб < maxAttempts.
-     * Інші помилки (немає коштів, немає рахунку) не повторюй — кидай одразу.
-     * Між спробами зроби коротку випадкову паузу (Thread.sleep). Навіщо вона?
+    /*
+     * Завдання 4 (ДЗ). Повтор (retry) при конфлікті версій.
+     *
+     * З @Version паралельний переказ може впасти з конфліктом. Це нормально: треба просто спробувати ще раз
+     * з актуальними даними. Але НЕ кожну помилку можна повторювати.
+     *
+     * Скелет:
+     *     TransferSupport.validate(fromId, toId, amount);
+     *     for (int attempt = 1; ; attempt++) {
+     *         try {
+     *             transferOnce(fromId, toId, amount);   // кожна спроба — НОВИЙ EntityManager (так уже зроблено в transferOnce)
+     *             return;                               // успіх
+     *         } catch (RuntimeException e) {
+     *             if (!TransferSupport.isOptimisticLockFailure(e) || attempt >= maxAttempts) {
+     *                 throw e;                          // не конфлікт версій або спроби скінчились
+     *             }
+     *             Thread.sleep(випадкова пауза 1..(5 * attempt) мс);   // ThreadLocalRandom.current().nextLong(...)
+     *         }
+     *     }
+     *
+     * Чому не повторювати InsufficientFundsException: грошей від повтору не додасться.
+     * Навіщо випадкова пауза: без неї потоки знову зіткнуться в ту саму мить.
+     * Thread.sleep кидає InterruptedException — обгорни: catch → Thread.currentThread().interrupt(); throw new IllegalStateException(e);
+     *
+     * Перевірка: тест «4 (ДЗ) · optimistic з retry».
      */
     public void transfer(Long fromId, Long toId, BigDecimal amount) {
+        // TODO 4 (ДЗ) Повторювати transferOnce при конфлікті версій, не більше maxAttempts разів (скелет над методом)
         TransferSupport.validate(fromId, toId, amount);
         transferOnce(fromId, toId, amount);
     }

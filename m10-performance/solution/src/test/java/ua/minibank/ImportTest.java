@@ -2,6 +2,7 @@ package ua.minibank;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@DisplayName("Модуль 10 · Імпорт виписки")
 class ImportTest {
 
     private static final int ROWS = 5_000;
@@ -50,6 +52,7 @@ class ImportTest {
     }
 
     @Test
+    @DisplayName("Готове · Csv.parse розбирає рядок")
     void parsesCsvLine() {
         StatementLine line = Csv.parse("UA000001;2026-03-15;-1250.50;UAH;Оренда");
 
@@ -61,6 +64,7 @@ class ImportTest {
     // ---------- Обов'язкова частина ----------
 
     @Test
+    @DisplayName("Демо · наївний імпорт: окремий запит на кожен рядок")
     void naiveImportSendsOneStatementPerRow() {
         ImportResult result = new NaiveImporter(plain).importFile(csv);
         System.out.println(result);
@@ -71,6 +75,7 @@ class ImportTest {
     }
 
     @Test
+    @DisplayName("1–3 · batch: запитів у десятки разів менше")
     void batchImportSendsFarFewerStatements() {
         ImportResult result = new BatchImporter(batching, BATCH_SIZE).importFile(csv);
         System.out.println(result);
@@ -84,6 +89,7 @@ class ImportTest {
     // ---------- Резерв ----------
 
     @Test
+    @DisplayName("4 (резерв) · StatelessSession зберігає всі рядки")
     void statelessImportStoresAllRows() {
         ImportResult result = new StatelessImporter(batching).importFile(csv);
         System.out.println(result);
@@ -92,6 +98,7 @@ class ImportTest {
     }
 
     @Test
+    @DisplayName("Демо · чистий JDBC batch (потрібне завдання 1: послідовність)")
     void plainJdbcImportStoresAllRows() {
         ImportResult result = new JdbcBatchImporter().importFile(csv);
         System.out.println(result);

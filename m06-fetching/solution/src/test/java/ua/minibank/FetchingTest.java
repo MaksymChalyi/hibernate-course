@@ -6,6 +6,7 @@ import jakarta.persistence.Persistence;
 import org.hibernate.LazyInitializationException;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@DisplayName("Модуль 6 · Fetching і N+1")
 class FetchingTest {
 
     private static final int CUSTOMERS = 20;
@@ -45,15 +47,17 @@ class FetchingTest {
     // ---------- Обов'язкова частина ----------
 
     @Test
+    @DisplayName("2 · рахунки з власниками — 1 запит (JOIN FETCH)")
     void accountOwnerLinesUsesOneQuery() {
         List<String> lines = service.accountOwnerLines();
 
         assertEquals(CUSTOMERS * DataSeeder.ACCOUNTS_PER_CUSTOMER, lines.size());
         assertEquals("UA00011 — Client1 Surname1", lines.get(0));
-        assertEquals(1, stats.getPrepareStatementCount(), "N+1: власник має прийти тим самим запитом");
+        assertEquals(1, stats.getPrepareStatementCount(), "Забагато запитів (N+1): додай join fetch a.customer (завдання 2)");
     }
 
     @Test
+    @DisplayName("3 · історія клієнта — 1 запит, нові зверху")
     void transactionHistoryUsesOneQueryAndIsSortedNewestFirst() {
         Long customerId = firstCustomerId();
         stats.clear();
@@ -68,6 +72,7 @@ class FetchingTest {
     }
 
     @Test
+    @DisplayName("Демо · LazyInitializationException поза EntityManager")
     void lazyCollectionOutsideEntityManagerThrows() {
         Long customerId = firstCustomerId();
         Customer detached;
@@ -80,6 +85,7 @@ class FetchingTest {
     }
 
     @Test
+    @DisplayName("4 · клієнти з рахунками — 1 запит, без дублікатів")
     void customersWithAccountsAreUsableAfterEntityManagerIsClosed() {
         List<Customer> customers = service.customersWithAccounts();
 
@@ -91,6 +97,7 @@ class FetchingTest {
     // ---------- Резерв ----------
 
     @Test
+    @DisplayName("5 (резерв) · entity graph — 1 запит")
     void entityGraphLoadsOwnersInOneQuery() {
         List<String> lines = service.accountOwnerLinesWithEntityGraph();
 
@@ -99,6 +106,7 @@ class FetchingTest {
     }
 
     @Test
+    @DisplayName("6 (резерв) · DTO-проєкція — 1 запит")
     void dtoProjectionUsesOneQuery() {
         List<AccountOwnerView> views = service.accountOwnerViews();
 

@@ -2,6 +2,7 @@ package ua.minibank;
 
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /** Резерв: TABLE_PER_CLASS. */
+@DisplayName("Модуль 8 · TABLE_PER_CLASS (резерв, завдання 8–10)")
 class TablePerClassTest {
 
     private static EntityManagerFactory emf;
@@ -42,11 +44,13 @@ class TablePerClassTest {
     }
 
     @Test
+    @DisplayName("8–10 · таблиці лише в конкретних класів")
     void onlyConcreteClassesHaveTables() {
         assertEquals(List.of("card_payments", "sepa_payments"), Db.tables(emf, "m08_tpc"));
     }
 
     @Test
+    @DisplayName("8–10 · поліморфний запит — UNION ALL, id унікальні")
     void polymorphicQueryUnionsAllTables() {
         // У лозі буде UNION ALL двох таблиць
         List<Payment> payments = Db.get(emf, em ->

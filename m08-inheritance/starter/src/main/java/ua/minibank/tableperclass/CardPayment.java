@@ -1,16 +1,23 @@
 package ua.minibank.tableperclass;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
 import ua.minibank.common.CurrencyCode;
 
 import java.math.BigDecimal;
 
 /*
- * TODO 9 (резерв). @Entity, таблиця card_payments. Поля not null.
+ * Завдання 9 (резерв). @Entity і @Table(name = "card_payments").
  */
+// TODO 9 (резерв) Над класом @Entity і @Table(name = "card_payments")
 public class CardPayment extends Payment {
 
+    /** NOT NULL можливий: у таблиці card_payments лише карткові платежі. */
+    @Column(name = "card_mask", nullable = false, length = 19)
     private String cardMask;
 
+    @Column(name = "merchant", nullable = false, length = 100)
     private String merchant;
 
     protected CardPayment() {

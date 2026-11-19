@@ -5,15 +5,16 @@ import java.util.Currency;
 import java.util.Objects;
 
 /**
- * Резерв. TODO 4a: зроби клас вбудованим (@Embeddable):
- *   - amount: precision = 19, scale = 4;
- *   - currency: довжина 3;
- *   - конструктор без аргументів.
+ * Гроші: сума завжди разом із валютою. «100» без валюти — не гроші: 100 UAH і 100 USD відрізняються в десятки разів.
+ * Завдання 4 (резерв): зробити клас вбудованим, як Address.
  */
+// TODO 4.1 (резерв) Познач клас @Embeddable, додай @Column(precision = 19, scale = 4) над amount і @Column(length = 3) над currency
 public class Money {
 
     private BigDecimal amount;
     private Currency currency;
+
+    // TODO 4.3 (резерв) Конструктор без аргументів: protected Money() { }
 
     public Money(BigDecimal amount, Currency currency) {
         this.amount = Objects.requireNonNull(amount);
@@ -32,6 +33,7 @@ public class Money {
         return currency;
     }
 
+    /** compareTo, а не equals: для BigDecimal 100.0 і 100.00 різні за equals, але однакові за значенням. */
     @Override
     public boolean equals(Object o) {
         if (this == o) {

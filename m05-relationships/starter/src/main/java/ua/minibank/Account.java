@@ -31,16 +31,31 @@ public class Account {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal balance;
 
-    /**
-     * TODO 1. Owning side зв'язку "рахунок → клієнт":
-     *   - @ManyToOne, LAZY, рахунок без клієнта не існує (optional = false);
-     *   - колонка customer_id, not null.
-     * Питання: чи потрібен тут cascade? Що станеться з CascadeType.REMOVE?
+    /*
+     * Завдання 1. Зв'язок «рахунок → клієнт» (many-to-one: багато рахунків в одного клієнта).
+     *
+     * У базі це одна колонка accounts.customer_id — зовнішній ключ (foreign key) на customers.id.
+     * У Java — поле типу Customer. Hibernate сам запише в customer_id значення customer.getId().
+     *
+     *   @ManyToOne(fetch = FetchType.LAZY, optional = false)
+     *   @JoinColumn(name = "customer_id", nullable = false)
+     *
+     *   @ManyToOne           — «багато рахунків — до одного клієнта».
+     *   fetch = LAZY         — не завантажувати клієнта разом з рахунком, а лише коли звернемось до нього.
+     *                          За замовчуванням @ManyToOne завантажує одразу (EAGER) — детально в модулі 6.
+     *   optional = false     — рахунок без клієнта не існує.
+     *   @JoinColumn          — ім'я колонки зовнішнього ключа. Без неї Hibernate назвав би її customer_id сам,
+     *                          але явно — зрозуміліше.
+     *
+     * Cascade тут НЕ потрібен. Подумай: що означало б CascadeType.REMOVE на цьому полі?
+     * (Тест «1 · видалення рахунку не видаляє клієнта» це перевіряє.)
      */
+    // TODO 1 Над полем customer: @ManyToOne(fetch = FetchType.LAZY, optional = false) і @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
     /*
-     * Питання для обговорення: чому тут немає List<Transaction> transactions?
+     * Питання для обговорення: чому тут НЕМАЄ списку List<Transaction> transactions?
+     * (Підказка: скільки операцій буде на рахунку через 5 років? Відповідь — у лекції, частина 4.)
      */
 
     protected Account() {

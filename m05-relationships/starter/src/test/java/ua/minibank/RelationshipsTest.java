@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 import jakarta.persistence.PersistenceException;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@DisplayName("Модуль 5 · Зв'язки")
 class RelationshipsTest {
 
     private static EntityManagerFactory emf;
@@ -49,6 +51,7 @@ class RelationshipsTest {
     // ---------- Обов'язкова частина ----------
 
     @Test
+    @DisplayName("3 · addAccount заповнює обидві сторони")
     void addAccountSetsBothSides() {
         Customer olena = new Customer("Olena", "Koval", "olena@example.com");
         Account account = new Account("UA001", CurrencyCode.UAH, BigDecimal.ZERO);
@@ -56,10 +59,11 @@ class RelationshipsTest {
         olena.addAccount(account);
 
         assertEquals(1, olena.getAccounts().size());
-        assertSame(olena, account.getCustomer(), "Owning side теж має знати про клієнта");
+        assertSame(olena, account.getCustomer(), "account.getCustomer() == null: addAccount має викликати account.setCustomer(this) (завдання 3)");
     }
 
     @Test
+    @DisplayName("2 · persist(клієнт) зберігає і рахунки (cascade PERSIST)")
     void persistingCustomerCascadesToAccounts() {
         Long customerId = persistCustomerWithTwoAccounts();
 
@@ -67,10 +71,11 @@ class RelationshipsTest {
                         "select count(a) from Account a where a.customer.id = :id", Long.class)
                 .setParameter("id", customerId)
                 .getSingleResult());
-        assertEquals(2L, rows, "Один persist(customer) має зберегти і рахунки");
+        assertEquals(2L, rows, "Один persist(customer) має зберегти і рахунки: cascade = PERSIST у @OneToMany (завдання 2)");
     }
 
     @Test
+    @DisplayName("2 · клієнт бачить свої рахунки після завантаження")
     void customerSeesItsAccountsAfterReload() {
         Long customerId = persistCustomerWithTwoAccounts();
 
@@ -80,6 +85,7 @@ class RelationshipsTest {
     }
 
     @Test
+    @DisplayName("1 · рахунок знає свого клієнта")
     void accountKnowsItsOwner() {
         persistCustomerWithTwoAccounts();
 
@@ -92,10 +98,11 @@ class RelationshipsTest {
     }
 
     @Test
+    @DisplayName("1–2 · FK customer_id у accounts, немає зайвої таблиці")
     void foreignKeyLivesInAccountsTableAndNoJoinTableIsCreated() {
         List<?> tables = get(em -> em.createNativeQuery(
                 "select cast(table_name as text) from information_schema.tables where table_schema = 'm05'").getResultList());
-        assertFalse(tables.contains("customers_accounts"), "Зайва таблиця: перевір mappedBy");
+        assertFalse(tables.contains("customers_accounts"), "Зайва таблиця customers_accounts: у @OneToMany немає mappedBy = \"customer\" (завдання 2)");
 
         Number fkColumns = get(em -> (Number) em.createNativeQuery("""
                 select count(*) from information_schema.columns
@@ -105,6 +112,7 @@ class RelationshipsTest {
     }
 
     @Test
+    @DisplayName("4 · операції посилаються на рахунок")
     void transactionsReferenceTheirAccount() {
         persistCustomerWithTwoAccounts();
         run(em -> {
@@ -120,6 +128,7 @@ class RelationshipsTest {
     }
 
     @Test
+    @DisplayName("1 · видалення рахунку не видаляє клієнта")
     void removingAccountDoesNotRemoveCustomer() {
         Long customerId = persistCustomerWithTwoAccounts();
 
@@ -132,6 +141,7 @@ class RelationshipsTest {
     // ---------- Домашнє завдання: Card ----------
 
     @Test
+    @DisplayName("5 (ДЗ) · картка належить рахунку")
     void cardBelongsToAccount() {
         persistCustomerWithTwoAccounts();
         Long[] cardId = new Long[1];
@@ -148,6 +158,7 @@ class RelationshipsTest {
     }
 
     @Test
+    @DisplayName("5 (ДЗ) · друга картка для того самого рахунку заборонена")
     void secondCardForTheSameAccountIsRejected() {
         persistCustomerWithTwoAccounts();
         Consumer<EntityManager> addCard = em -> {

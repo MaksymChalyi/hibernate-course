@@ -33,12 +33,21 @@ public class Account {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal balance;
 
-    /**
-     * Owning side: саме це поле Hibernate записує в колонку customer_id.
-     * Зараз зв'язок EAGER (значення за замовчуванням для @ManyToOne).
-     * Жодного cascade: видалення рахунку не повинно видаляти клієнта.
+    /*
+     * Завдання 1. Зробити зв'язок лінивим (LAZY).
+     *
+     * Зараз тут @ManyToOne(optional = false) без fetch. Для @ManyToOne значення за замовчуванням — EAGER:
+     * завантажуючи рахунок, Hibernate ЗАВЖДИ завантажує й клієнта, навіть якщо він не потрібен.
+     *
+     * Зроби:  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+     * (import jakarta.persistence.FetchType — Alt+Enter.)
+     *
+     * Важливо: LAZY сам по собі N+1 НЕ прибирає. Він лише переносить запити з моменту завантаження рахунків
+     * у момент звернення до клієнта. Прибирати N+1 будемо в завданнях 2–4 (JOIN FETCH).
+     * Подивись на тест BatchFetchTest до і після: кількість запитів у циклі та сама.
      */
-    @ManyToOne(optional = false) // TODO 1: яке значення fetch тут за замовчуванням? Зроби LAZY
+    // TODO 1 Додати fetch = FetchType.LAZY у @ManyToOne над customer
+    @ManyToOne(optional = false)
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 

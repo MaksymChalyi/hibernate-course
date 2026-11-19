@@ -31,13 +31,26 @@ public class Customer {
     @Column(nullable = false, unique = true)
     private String email;
 
-    /**
-     * TODO 2. Зроби зворотну сторону зв'язку "клієнт → рахунки":
-     *   - прибери @Transient;
-     *   - @OneToMany з mappedBy (на яке поле в Account?);
-     *   - cascade: які операції мають переходити з клієнта на рахунки? Обґрунтуй вибір.
-     * Питання: що станеться без mappedBy? Перевір тестом foreignKeyLivesInAccountsTableAndNoJoinTableIsCreated.
+    /*
+     * Завдання 2. Зворотна сторона: «клієнт → його рахунки» (one-to-many).
+     *
+     * Колонка вже є: accounts.customer_id (завдання 1). Нова колонка НЕ потрібна.
+     * Треба лише сказати Hibernate: «цей список — дзеркало поля Account.customer».
+     *
+     *   @OneToMany(mappedBy = "customer", cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+     *
+     *   mappedBy = "customer" — ім'я ПОЛЯ в класі Account, яке керує зв'язком.
+     *                           Без mappedBy Hibernate вирішить, що це окремий зв'язок, і створить
+     *                           зайву таблицю customers_accounts (тест «2 · немає зайвої таблиці»).
+     *   cascade PERSIST       — persist(клієнт) збереже і нові рахунки з його списку.
+     *   cascade MERGE         — merge(клієнт) пройде і по рахунках.
+     *   Чому БЕЗ REMOVE: у банку рахунок з історією операцій не видаляють разом з клієнтом.
+     *
+     * Кроки:
+     *   1. прибери @Transient;
+     *   2. додай @OneToMany(...) як вище.
      */
+    // TODO 2 Замість @Transient: @OneToMany(mappedBy = "customer", cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @Transient
     private List<Account> accounts = new ArrayList<>();
 
@@ -50,12 +63,21 @@ public class Customer {
         this.email = email;
     }
 
-    /**
-     * TODO 3. Helper має синхронізувати ОБИДВІ сторони зв'язку.
-     * Зараз рахунок потрапляє лише в список. Що тоді буде в колонці customer_id?
+    /*
+     * Завдання 3. Helper, який тримає ОБИДВІ сторони зв'язку синхронними.
+     *
+     * Зараз рахунок потрапляє лише в список accounts. Але Hibernate записує customer_id
+     * за полем Account.customer (owning side), а список — лише «дзеркало».
+     * Наслідок: у базу піде customer_id = NULL → помилка NOT NULL.
+     *
+     * Додай другий рядок:   account.setCustomer(this);
+     * (setCustomer у Account — package-private: змінювати зв'язок можна лише через addAccount.)
+     *
+     * Перевірка: тест «3 · addAccount заповнює обидві сторони».
      */
     public void addAccount(Account account) {
         accounts.add(account);
+        // TODO 3 Встановити owning side: account.setCustomer(this)
     }
 
     public Long getId() {

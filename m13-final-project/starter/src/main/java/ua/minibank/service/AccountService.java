@@ -37,6 +37,8 @@ public class AccountService {
     }
 
     /** Резерв: історія операцій сторінками. Розмір сторінки обмежений, щоб не віддати мільйон рядків. */
+    // TODO 1.2 Додати перевантаження history(accountId, TransactionFilter filter, page, size) на Criteria API.
+    //          Умова в where — лише для полів filter, що не null; той самий фільтр — у count. Етап 1 у ЗАВДАННЯ.md.
     public PageDto<TransactionDto> history(Long accountId, int page, int size) {
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw new IllegalArgumentException("page >= 0, 1 <= size <= " + MAX_PAGE_SIZE);

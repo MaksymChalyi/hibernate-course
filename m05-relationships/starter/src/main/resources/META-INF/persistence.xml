@@ -8,7 +8,7 @@
         <class>ua.minibank.Customer</class>
         <class>ua.minibank.Account</class>
         <class>ua.minibank.Transaction</class>
-        <!-- Домашнє завдання: розкоментуй, коли Card стане entity -->
+        <!-- TODO 5.5 (ДЗ) Розкоментуй рядок нижче, коли Card стане entity -->
         <!-- <class>ua.minibank.Card</class> -->
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
 

@@ -11,6 +11,7 @@ import ua.minibank.service.TransferService;
  * і зберігаються в атрибуті ServletContext, звідки їх беруть servlet-и.
  * Це ручна версія того, що пізніше робитиме Spring IoC-контейнер.
  */
+// TODO 2.4 Додати StatementImportService у AppContext і створити його в AppContextListener
 public record AppContext(EntityManagerFactory emf, ObjectMapper mapper,
                          AccountService accountService, TransferService transferService) {
 

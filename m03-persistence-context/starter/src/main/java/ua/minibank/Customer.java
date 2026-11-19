@@ -62,11 +62,27 @@ public class Customer {
     }
 
     /*
-     * TODO 4 (резерв). Ця реалізація має дві помилки. Знайди їх через тести в CustomerServiceTest:
-     *   - twoNewCustomersAreNotEqual;
-     *   - customerIsStillFoundInHashSetAfterPersist.
-     * Виправ equals і hashCode так, щоб пройшли всі тести.
+     * Завдання 4 (резерв). equals/hashCode для entity.
+     *
+     * Ця реалізація виглядає логічно («рівні, якщо однаковий id»), але має дві помилки.
+     * Знайди їх через два тести в CustomerServiceTest:
+     *
+     *   «4 · два нових клієнти не рівні» — у нових клієнтів id = null.
+     *        Objects.equals(null, null) == true → два РІЗНІ нові клієнти вважаються рівними.
+     *
+     *   «4 · клієнт не губиться в HashSet після persist» — hashCode залежить від id.
+     *        Поклали клієнта в HashSet, коли id = null → кошик за hashCode(null).
+     *        Після persist id = 1 → hashCode інший → set.contains(...) шукає в іншому кошику і не знаходить.
+     *
+     * Що зробити:
+     *   equals:   рівні лише ті, у кого id НЕ null і однаковий.
+     *             Використовуй getId(), а не поле id — у proxy Hibernate (модуль 6) поле порожнє.
+     *             instanceof, а не getClass() — proxy є підкласом Customer.
+     *   hashCode: має НЕ змінюватися, коли з'являється id. Найпростіше — константа:
+     *             return Customer.class.hashCode();
+     * Розбір варіантів — у лекції, частина «equals і hashCode».
      */
+    // TODO 4 (резерв) Виправити equals (null-id не рівні) і hashCode (не залежить від id)
     @Override
     public boolean equals(Object o) {
         if (this == o) {

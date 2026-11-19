@@ -20,9 +20,20 @@ import java.time.LocalDate;
 public class StatementLine {
 
     /*
-     * TODO 1. З IDENTITY batching не працює навіть з jdbc.batch_size. Чому?
-     * Заміни на SEQUENCE "statement_line_seq" з allocationSize = 50.
+     * Завдання 1. Генерація id, з якою працює пакетна вставка (batching).
+     *
+     * Зараз IDENTITY. З ним Hibernate мусить виконати INSERT одразу на кожен persist — щоб дізнатися id.
+     * Тому навіть з hibernate.jdbc.batch_size пакетів не буде: 100 000 рядків = 100 000 окремих запитів.
+     *
+     * Заміни дві анотації нижче на (як у модулі 2):
+     *     @Id
+     *     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "statement_line_seq")
+     *     @SequenceGenerator(name = "statement_line_seq", sequenceName = "statement_line_seq", allocationSize = 50)
+     *
+     * Після цього Emfs.createSchema() створить послідовність, а JdbcBatchImporter (він бере nextval('statement_line_seq'))
+     * теж запрацює.
      */
+    // TODO 1 Замінити IDENTITY на SEQUENCE "statement_line_seq" з allocationSize = 50
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

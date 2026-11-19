@@ -41,6 +41,7 @@ public final class AppServer {
             Tomcat.addServlet(context, "transfers", new TransferServlet());
             context.addServletMappingDecoded("/transfers", "transfers");
 
+            // TODO 2.5 Зареєструвати StatementServlet на "/statements"
             tomcat.start();
             if (!context.getState().isAvailable()) {
                 tomcat.stop();

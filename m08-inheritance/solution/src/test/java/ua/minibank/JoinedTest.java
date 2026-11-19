@@ -2,6 +2,7 @@ package ua.minibank;
 
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
+@DisplayName("Модуль 8 · JOINED (завдання 5–7)")
 class JoinedTest {
 
     private static EntityManagerFactory emf;
@@ -41,11 +43,13 @@ class JoinedTest {
     }
 
     @Test
+    @DisplayName("5–7 · таблиці payments, card_payments, sepa_payments")
     void parentAndChildTablesExist() {
         assertEquals(List.of("card_payments", "payments", "sepa_payments"), Db.tables(emf, "m08_joined"));
     }
 
     @Test
+    @DisplayName("5–7 · спільні поля в payments, специфічні — у нащадках")
     void commonFieldsInParentSpecificFieldsInChild() {
         assertEquals(2, Db.count(emf, "payments"));
         assertEquals(1, Db.count(emf, "card_payments"));
@@ -53,6 +57,7 @@ class JoinedTest {
     }
 
     @Test
+    @DisplayName("6 · рядок нащадка має той самий id (payment_id)")
     void childRowSharesIdWithParentRow() {
         Number matched = Db.get(emf, em -> (Number) em.createNativeQuery(
                 "select count(*) from payments p join card_payments c on c.payment_id = p.id").getSingleResult());
@@ -61,6 +66,7 @@ class JoinedTest {
     }
 
     @Test
+    @DisplayName("5–7 · поліморфний запит повертає конкретні типи")
     void polymorphicQueryReturnsConcreteTypes() {
         List<Payment> payments = Db.get(emf, em ->
                 em.createQuery("select p from Payment p order by p.id", Payment.class).getResultList());
@@ -71,6 +77,7 @@ class JoinedTest {
     }
 
     @Test
+    @DisplayName("6 · запит до CardPayment напряму")
     void querySubclassDirectly() {
         List<CardPayment> cards = Db.get(emf, em ->
                 em.createQuery("select c from CardPayment c where c.merchant = 'Silpo'", CardPayment.class).getResultList());

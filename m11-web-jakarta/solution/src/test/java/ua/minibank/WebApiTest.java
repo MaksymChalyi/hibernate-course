@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * Тест через справжній HTTP: Tomcat на випадковому порту, справжня база.
  * Перед кожним тестом база очищується і міграції виконуються заново.
  */
+@DisplayName("Модуль 11 · REST API через HTTP")
 class WebApiTest {
 
     private static final HttpClient CLIENT = HttpClient.newHttpClient();
@@ -52,6 +54,7 @@ class WebApiTest {
     // ---------- Обов'язкова частина ----------
 
     @Test
+    @DisplayName("1–3 · GET /accounts/1 повертає рахунок як DTO")
     void getAccountReturnsDto() throws Exception {
         HttpResponse<String> response = get("/accounts/1");
 
@@ -63,6 +66,7 @@ class WebApiTest {
     }
 
     @Test
+    @DisplayName("1–3 · у JSON немає полів entity (version, customer)")
     void entityFieldsDoNotLeakIntoJson() throws Exception {
         JsonNode account = JSON.readTree(get("/accounts/1").body());
 
@@ -71,6 +75,7 @@ class WebApiTest {
     }
 
     @Test
+    @DisplayName("4 · POST /transfers переказує гроші")
     void transferMovesMoney() throws Exception {
         HttpResponse<String> response = post("/transfers", """
                 {"fromAccountId": 1, "toAccountId": 3, "amount": 250}
@@ -84,6 +89,7 @@ class WebApiTest {
     // ---------- Резерв ----------
 
     @Test
+    @DisplayName("5 (резерв) · невідомий рахунок → 404")
     void unknownAccountReturns404() throws Exception {
         HttpResponse<String> response = get("/accounts/999");
 
@@ -92,6 +98,7 @@ class WebApiTest {
     }
 
     @Test
+    @DisplayName("5 (резерв) · бракує коштів → 422, баланс не змінився")
     void insufficientFundsReturns422AndChangesNothing() throws Exception {
         HttpResponse<String> response = post("/transfers", """
                 {"fromAccountId": 3, "toAccountId": 1, "amount": 100000}
@@ -103,6 +110,7 @@ class WebApiTest {
     }
 
     @Test
+    @DisplayName("5 (резерв) · різні валюти → 422")
     void differentCurrenciesReturn422() throws Exception {
         HttpResponse<String> response = post("/transfers", """
                 {"fromAccountId": 1, "toAccountId": 2, "amount": 10}
@@ -112,11 +120,13 @@ class WebApiTest {
     }
 
     @Test
+    @DisplayName("5 (резерв) · кривий JSON → 400")
     void malformedJsonReturns400() throws Exception {
         assertEquals(400, post("/transfers", "{not json").statusCode());
     }
 
     @Test
+    @DisplayName("6 (резерв) · історія сторінками, нові спочатку")
     void historyIsPagedNewestFirst() throws Exception {
         post("/transfers", """
                 {"fromAccountId": 1, "toAccountId": 3, "amount": 250}

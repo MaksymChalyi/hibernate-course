@@ -1,17 +1,32 @@
 package ua.minibank.joined;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.PrimaryKeyJoinColumn;
+import jakarta.persistence.Table;
 import ua.minibank.common.CurrencyCode;
 
 import java.math.BigDecimal;
 
 /*
- * TODO 6. @Entity, таблиця card_payments, первинний ключ payment_id (@PrimaryKeyJoinColumn).
- * Тут поля можуть бути not null. Чому?
+ * Завдання 6. Картковий платіж у JOINED — власна таблиця card_payments.
+ *
+ *   @Entity
+ *   @Table(name = "card_payments")
+ *   @PrimaryKeyJoinColumn(name = "payment_id")
+ *
+ * @PrimaryKeyJoinColumn — первинний ключ card_payments, який водночас є зовнішнім ключем на payments.id.
+ * Один платіж = рядок у payments + рядок у card_payments з тим самим id.
+ * Тут колонки вже з nullable = false. Чому в JOINED так можна, а в SINGLE_TABLE — ні?
  */
+// TODO 6 Над класом @Entity, @Table(name = "card_payments"), @PrimaryKeyJoinColumn(name = "payment_id")
 public class CardPayment extends Payment {
 
+    /** NOT NULL можливий: у таблиці card_payments лише карткові платежі. */
+    @Column(name = "card_mask", nullable = false, length = 19)
     private String cardMask;
 
+    @Column(name = "merchant", nullable = false, length = 100)
     private String merchant;
 
     protected CardPayment() {

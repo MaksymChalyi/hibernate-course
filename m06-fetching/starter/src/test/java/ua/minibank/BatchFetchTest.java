@@ -5,6 +5,7 @@ import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -16,11 +17,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Демонстрація: той самий наївний цикл з default_batch_fetch_size і без нього.
  * Код не змінюється, змінюється лише налаштування.
  */
+@DisplayName("Модуль 6 · Демо: batch fetching")
 class BatchFetchTest {
 
     private static final int CUSTOMERS = 20;
 
     @Test
+    @DisplayName("Демо · наївний цикл без batch fetching — N+1")
     void naiveLoopIsNPlusOneWithoutBatchFetching() {
         long queries = runNaiveLoop(Map.of());
 
@@ -29,6 +32,7 @@ class BatchFetchTest {
     }
 
     @Test
+    @DisplayName("Демо · з default_batch_fetch_size = 16 — пачками")
     void batchFetchingLoadsOwnersInChunks() {
         long queries = runNaiveLoop(Map.of("hibernate.default_batch_fetch_size", "16"));
 

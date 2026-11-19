@@ -1,12 +1,16 @@
 # Модуль 6. Fetching і проблема N+1
 
-**Мета:** уміти знайти і виправити N+1 — найпоширенішу проблему продуктивності в Hibernate.
+**Що вмітимеш після модуля:**
+- розуміти, коли Hibernate завантажує пов'язані об'єкти: одразу чи «за потреби»;
+- знаходити N+1 у логах — найпоширенішу проблему продуктивності в Hibernate;
+- виправляти її `JOIN FETCH`, entity graph, batch fetching або DTO-проєкцією;
+- розуміти причину `LazyInitializationException` і правильно її виправляти.
 
 **Код:** `m06-fetching/starter` → `m06-fetching/solution`
 
-**Критерій завершення:** учень за логами знаходить N+1 і обирає рішення залежно від сценарію.
+**Що треба пам'ятати:** `@ManyToOne`/`@OneToMany` з модуля 5; Persistence Context і proxy з модуля 3.
 
-> Ще один щільний модуль. Якщо на практиці учень довго шукає N+1 у логах — це нормально, саме цього навику й треба. Резерв можна перенести на наступне заняття.
+> Щільний модуль. Головне — щоб учень сам знайшов N+1 у консолі. Резерв можна перенести.
 
 ---
 
@@ -15,140 +19,258 @@
 | Блок | Час | Що робимо |
 |---|---|---|
 | Розбір ДЗ | 10 хв | `Card`, ER-діаграма |
-| Теорія | 25 хв | LAZY/EAGER, proxy, `LazyInitializationException`, N+1, `JOIN FETCH`, batch fetch |
-| Практика | 25 хв | TODO 1–4 в `AccountReportService` під лічильником запитів |
-| **Резерв** | 30 хв | Entity graph, DTO-проєкції, дві колекції, пагінація з fetch |
+| Теорія | 25 хв | Частини 1–5 |
+| Практика | 25 хв | Завдання 1–4 |
+| **Резерв** | 30 хв | Частина 6: entity graph, DTO, дві колекції, пагінація |
 
 ---
 
 ## Розбір домашнього завдання (10 хв)
 
-На ER-діаграмі має бути:
-
 | Зв'язок | Owning side | Fetch | Cascade |
 |---|---|---|---|
 | Account → Customer | `Account.customer` | LAZY | немає |
-| Customer → Accounts | inverse (`mappedBy`) | LAZY (за замовч.) | PERSIST, MERGE |
+| Customer → Accounts | inverse (`mappedBy`) | LAZY (за замовчуванням) | PERSIST, MERGE |
 | Transaction → Account | `Transaction.account` | LAZY | немає |
 | Card → Account | `Card.account` (`unique`) | LAZY | немає |
 
 ---
 
-## Теорія (25 хв)
+# Частина 1. LAZY і EAGER
 
-### 1. LAZY і EAGER (5 хв)
+## 1.1. Питання, яке Hibernate вирішує щоразу
+
+Завантажуємо рахунок. А клієнта, якому він належить, завантажувати теж?
+
+- **EAGER** («жадібно») — так, завжди, разом з рахунком.
+- **LAZY** («ліниво») — ні. Завантажити лише тоді, коли код звернеться до `account.getCustomer().getXxx()`.
+
+## 1.2. Значення за замовчуванням — пастка
 
 | Зв'язок | За замовчуванням |
 |---|---|
 | `@ManyToOne`, `@OneToOne` | **EAGER** |
 | `@OneToMany`, `@ManyToMany` | LAZY |
 
-- **EAGER** — пов'язаний об'єкт завантажується завжди, разом з основним (JOIN або окремим SELECT).
-- **LAZY** — замість об'єкта стоїть proxy (для одного об'єкта) або незавантажена колекція; запит виконується при першому зверненні.
+Тобто кожен `@ManyToOne` без `fetch = LAZY` тягне пов'язаний об'єкт завжди. Якщо в `Transaction` є `@ManyToOne Account`, а в `Account` — `@ManyToOne Customer`, то завантаження однієї операції потягне рахунок і клієнта.
 
-**Чому EAGER майже завжди погано:** рішення «завантажувати завжди» приймається в mapping, раз і для всіх запитів. Один екран потребує клієнта, десять інших — ні, але платять усі. До того ж EAGER не захищає від N+1 у JPQL-запитах — це покаже практика. Правило: **усі зв'язки LAZY**, а що завантажити — вирішує конкретний запит.
+## 1.3. Чому EAGER — майже завжди погано
 
-### 2. Proxy і `LazyInitializationException` (5 хв)
+Рішення «завантажувати завжди» приймається **в mapping**, раз і для всіх запитів. Одна сторінка показує ім'я клієнта, десять інших — ні, але платять усі. А ще EAGER **не** рятує від N+1 у JPQL (покажемо нижче).
+
+**Правило:** усі зв'язки — `LAZY`. Що завантажити — вирішує **конкретний запит**.
+
+```java
+@ManyToOne(fetch = FetchType.LAZY, optional = false)
+@JoinColumn(name = "customer_id", nullable = false)
+private Customer customer;
+```
+
+---
+
+# Частина 2. Proxy і LazyInitializationException
+
+## 2.1. Що лежить у LAZY-полі
+
+Коли Hibernate завантажує рахунок з LAZY-клієнтом, у поле `customer` він кладе **proxy** — «заглушку». Це підклас `Customer`, згенерований Hibernate, у якого заповнений лише id. При першому зверненні до будь-якого іншого поля proxy іде в базу і довантажує себе.
+
+```java
+Account a = em.find(Account.class, 10L);   // SELECT з accounts. customer — proxy з id = 1
+a.getCustomer().getId();                    // 1 — без запиту, id відомий
+a.getCustomer().getFullName();              // SELECT з customers where id = 1
+```
+
+Для колекцій (`customer.getAccounts()`) — те саме: Hibernate кладе свою реалізацію `List`, яка завантажує елементи при першому зверненні.
+
+## 2.2. LazyInitializationException
+
+Довантажити proxy можна лише через **відкритий** `EntityManager`:
 
 ```java
 Customer customer;
 try (EntityManager em = emf.createEntityManager()) {
-    customer = em.find(Customer.class, id);
-}
-customer.getAccounts().size();   // 💥 LazyInitializationException
+    customer = em.find(Customer.class, 1L);
+}                                           // EntityManager закрито
+customer.getAccounts().size();              // LazyInitializationException: could not initialize proxy - no Session
 ```
 
-Колекція `accounts` не завантажена, а `EntityManager`, через який її можна завантажити, уже закритий.
+Колекція не завантажена, а завантажити її вже нічим.
 
-❌ Неправильні рішення:
+**Неправильні «рішення»** (часто трапляються в інтернеті):
 
-- зробити колекцію EAGER;
-- тримати `EntityManager` відкритим довше (Open Session in View, модуль 11);
-- `hibernate.enable_lazy_load_no_trans=true` — кожне звернення відкриває нову сесію і транзакцію: N+1 у найгіршому вигляді.
+| «Рішення» | Чому погано |
+|---|---|
+| Зробити колекцію `EAGER` | Вона вантажиться завжди, скрізь |
+| Тримати `EntityManager` відкритим довше (Open Session in View, модуль 11) | Запити виконуються будь-де, N+1 ховається |
+| `hibernate.enable_lazy_load_no_trans = true` | Кожне звернення — нове з'єднання і транзакція. N+1 у найгіршому вигляді |
 
-✅ Правильне рішення: **завантажити все потрібне в тому самому запиті** (`JOIN FETCH`, entity graph) або повернути DTO.
+**Правильне рішення:** завантажити все потрібне **в тому самому запиті** (`JOIN FETCH`, entity graph) або повернути DTO.
 
-### 3. N+1 (7 хв)
+---
+
+# Частина 3. N+1
+
+## 3.1. Що це
 
 ```java
 List<Account> accounts = em.createQuery("select a from Account a", Account.class).getResultList(); // 1 запит
 for (Account a : accounts) {
-    a.getCustomer().getFullName();   // +1 запит на кожного нового клієнта
+    System.out.println(a.getNumber() + " — " + a.getCustomer().getFullName());                      // +1 на кожного клієнта
 }
 ```
 
-40 рахунків 20 клієнтів → **21 запит**. На сторінці зі 100 рядків — 101. Кожен окремий запит швидкий, але разом це сотні round-trip до бази.
+- **1** — запит списку.
+- **N** — по одному запиту для кожного елемента, щоб довантажити зв'язок.
 
-**Як знайти:** у лозі `org.hibernate.SQL` бачиш однакові SELECT, що відрізняються лише параметром. У тестах — лічильник `Statistics.getPrepareStatementCount()`.
+40 рахунків 20 клієнтів → 1 + 20 = **21** запит (клієнт, уже завантажений раніше, береться з Persistence Context). Сторінка зі 100 рядків — 101 запит. Кожен окремо швидкий (1–2 мс), але разом це сотні звернень по мережі.
 
-### 4. `JOIN FETCH` (5 хв)
+## 3.2. Як знайти в консолі
 
-```java
-em.createQuery("select a from Account a join fetch a.customer order by a.id", Account.class)
+Шукай **однакові** `select`, що відрізняються лише параметром:
+
+```sql
+select ... from accounts a1_0
+select ... from customers c1_0 where c1_0.id=?
+select ... from customers c1_0 where c1_0.id=?
+select ... from customers c1_0 where c1_0.id=?
+...                                              ← ось вони, N штук
 ```
 
-Один SELECT з JOIN: рахунки разом із клієнтами. `join` без `fetch` лише фільтрує, а клієнта однаково завантажить окремо.
+У тестах — лічильник Hibernate Statistics: `stats.getPrepareStatementCount()`.
 
-Для колекції:
+## 3.3. EAGER не рятує
 
-```java
-em.createQuery("select c from Customer c left join fetch c.accounts order by c.id", Customer.class)
+Інтуїтивно: «зроблю EAGER — і клієнти прийдуть одразу». Але JPQL виконується **рівно так, як написаний**: `select a from Account a` вибирає з `accounts` без JOIN. Після цього Hibernate бачить EAGER-зв'язок і **довантажує** клієнтів окремими запитами. N+1 той самий, лише раніше.
+
+---
+
+# Частина 4. JOIN FETCH
+
+## 4.1. join і join fetch — різниця
+
+```sql
+-- JPQL
+select a from Account a join fetch a.customer order by a.id
 ```
 
-`LEFT` — щоб не втратити клієнтів без рахунків. JOIN з колекцією множить рядки (клієнт із 2 рахунками — 2 рядки); Hibernate 6 сам прибирає дублікати клієнтів, `distinct` більше не потрібен.
+```sql
+-- SQL, який згенерує Hibernate
+select a1_0.id, a1_0.number, ..., c1_0.id, c1_0.first_name, c1_0.last_name, ...
+from accounts a1_0
+join customers c1_0 on c1_0.id = a1_0.customer_id
+order by a1_0.id
+```
 
-### 5. `default_batch_fetch_size` (3 хв)
+Один запит. Колонки клієнта прийшли разом з рахунком, і Hibernate одразу заповнив поле `customer` справжнім об'єктом.
+
+| | `join a.customer c` | `join fetch a.customer` |
+|---|---|---|
+| Для чого | Фільтрувати / сортувати за полями клієнта | **Заповнити** поле `customer` в результаті |
+| Колонки клієнта в SELECT | Ні | Так |
+| Після запиту `a.getCustomer()` | Proxy → ще один запит | Справжній об'єкт |
+
+## 4.2. JOIN FETCH для колекції
+
+```sql
+select c from Customer c left join fetch c.accounts order by c.id
+```
+
+- `left` — щоб не втратити клієнтів **без** рахунків (звичайний JOIN їх відкине).
+- JOIN з колекцією множить рядки: клієнт з 2 рахунками — 2 рядки результату SQL. Hibernate 6 **сам** прибирає дублікати клієнтів. (У Hibernate 5 для цього писали `select distinct c`.)
+
+## 4.3. Від якої сторони починати запит
+
+Для історії операцій клієнта зручніше почати з **операцій**:
+
+```sql
+select t from Transaction t
+join fetch t.account a
+where a.customer.id = :customerId
+order by t.createdAt desc, t.id desc
+```
+
+`a.customer.id` не потребує JOIN з `customers`: значення `customer_id` уже є в рядку рахунку.
+
+---
+
+# Частина 5. Batch fetching
 
 ```xml
 <property name="hibernate.default_batch_fetch_size" value="16"/>
 ```
 
-Код не змінюється, але lazy-зв'язки довантажуються пачками: замість 20 запитів по одному клієнту — 2 запити по 16 і 4. Для 20 клієнтів: 1 + 2 = 3 запити.
+Код **не змінюється**, але LAZY-зв'язки довантажуються **пачками**: замість 20 запитів `where id = ?` — запити `where id in (?, ?, ..., ?)` по 16 id. Для 20 клієнтів: 1 + 2 = 3 запити.
 
-| | `JOIN FETCH` | Batch fetch |
+| | JOIN FETCH | Batch fetching |
 |---|---|---|
 | Запитів | 1 | 1 + N / розмір пачки |
-| Зміна коду | Конкретний запит | Глобальне налаштування |
-| Коли | Точно знаєш, що потрібно | Страховка від забутих N+1 |
+| Що змінюємо | Конкретний запит | Одне глобальне налаштування |
+| Коли | Точно знаємо, що дані потрібні | Страховка від забутих N+1 |
 
-Добра практика: увімкнути `default_batch_fetch_size` глобально як страховку і **плюс** писати `JOIN FETCH` там, де відомо, що дані потрібні.
+Добра практика: увімкнути `default_batch_fetch_size` глобально (як страховку) **і** писати `JOIN FETCH` там, де відомо, що дані потрібні.
+
+**Перевір себе:**
+1. Скільки запитів зробить наївний цикл по 100 рахунках 50 клієнтів?
+2. Чим `join` відрізняється від `join fetch`?
+3. Чому EAGER не рятує від N+1 у JPQL?
 
 ---
 
 ## Практика (25 хв)
 
-Учень запускає `FetchingTest` у starter — тести падають з повідомленнями про кількість запитів.
+### Крок 0. Побачити проблему (3 хв)
 
-**TODO 1. `Account.customer` → LAZY** (3 хв). Тест `BatchFetchTest.naiveLoopIsNPlusOneWithoutBatchFetching` показує: N+1 був і з EAGER, і з LAZY. EAGER лише переносить запити з циклу в момент виконання `getResultList()`.
+Запусти `Main` у starter: «Наївний цикл: запитів = 21». У консолі — 20 однакових `select ... from customers where id = ?`. Учень сам рахує їх і називає проблему.
 
-**TODO 2. `accountOwnerLines`** (7 хв)
+### Завдання 1. LAZY (2 хв)
+
+`@ManyToOne(fetch = FetchType.LAZY, optional = false)`. Запусти `BatchFetchTest` до і після: кількість запитів у циклі **та сама**. LAZY лише переносить момент запитів.
+
+### Завдання 2. accountOwnerLines (5 хв)
+
+Змінити запит: `select a from Account a join fetch a.customer order by a.id`. Тест «2 · …» — 1 запит.
+
+### Завдання 3. transactionHistory (10 хв)
+
+Видалити цикл, написати один запит від `Transaction` (частина 4.3) і перетворити результат:
 
 ```java
-em.createQuery("select a from Account a join fetch a.customer order by a.id", Account.class)
+public List<TransactionView> transactionHistory(Long customerId) {
+    try (EntityManager em = emf.createEntityManager()) {
+        return em.createQuery("""
+                        select t from Transaction t
+                        join fetch t.account a
+                        where a.customer.id = :customerId
+                        order by t.createdAt desc, t.id desc
+                        """, Transaction.class)
+                .setParameter("customerId", customerId)
+                .getResultList()
+                .stream()
+                .map(t -> new TransactionView(t.getAccount().getNumber(), t.getType(), t.getAmount(), t.getCreatedAt()))
+                .toList();
+    }
+}
 ```
 
-Тест: 1 запит замість 21.
+`"""..."""` — text block (Java 15+): багаторядковий рядок, зручно для запитів.
 
-**TODO 3. `transactionHistory`** (10 хв). Зараз: SELECT клієнта + SELECT рахунків + по SELECT операцій на кожен рахунок. Один запит:
+### Завдання 4. customersWithAccounts (5 хв)
 
-```java
-em.createQuery("""
-        select t from Transaction t
-        join fetch t.account a
-        where a.customer.id = :customerId
-        order by t.createdAt desc, t.id desc
-        """, Transaction.class)
-```
+`select c from Customer c left join fetch c.accounts order by c.id`. Тест «4 · …»: 1 запит, 20 клієнтів.
 
-Зверни увагу: `a.customer.id` не потребує JOIN з `customers` — значення `customer_id` уже є в рядку рахунку.
+**Якщо не працює:**
 
-**TODO 4. `customersWithAccounts`** (5 хв): `left join fetch c.accounts`. Тест перевіряє, що після закриття `EntityManager` можна викликати `getAccounts().size()` і що клієнтів 20, а не 40.
+| Що бачиш | Причина |
+|---|---|
+| 40 клієнтів замість 20 | Hibernate 6 прибирає дублікати сам; перевір, що в тесті запит саме з `join fetch`, а не `join` |
+| `LazyInitializationException` у тесті 4 | Немає `fetch` у запиті |
+| `could not resolve attribute 'customers'` | Помилка в імені поля: `c.accounts`, `a.customer` |
 
 ---
 
-## Резерв (30 хв)
+# Частина 6. Резерв (30 хв)
 
-### Entity graph (7 хв)
+## 6.1. Entity graph (7 хв)
 
 ```java
 EntityGraph<Account> graph = em.createEntityGraph(Account.class);
@@ -158,13 +280,15 @@ em.createQuery("select a from Account a order by a.id", Account.class)
   .getResultList();
 ```
 
-Те саме, що `JOIN FETCH`, але план завантаження відокремлений від тексту запиту: один запит можна виконати з різними графами. У Spring Data JPA це анотація `@EntityGraph` на методі репозиторію.
+Те саме, що `JOIN FETCH`, але план завантаження **відокремлений** від тексту запиту: один запит можна виконати з різними графами. У Spring Data JPA це анотація `@EntityGraph` над методом репозиторію.
 
-`fetchgraph` — завантажити лише вказане (решта за mapping); `loadgraph` — вказане плюс усе EAGER з mapping.
+`fetchgraph` — завантажити лише вказане (решта — за mapping); `loadgraph` — вказане плюс усе EAGER з mapping.
 
-### DTO-проєкції (8 хв)
+## 6.2. DTO-проєкції (8 хв)
 
 ```java
+public record AccountOwnerView(String accountNumber, String firstName, String lastName) { }
+
 em.createQuery("""
         select new ua.minibank.AccountOwnerView(a.number, c.firstName, c.lastName)
         from Account a join a.customer c
@@ -172,45 +296,59 @@ em.createQuery("""
         """, AccountOwnerView.class)
 ```
 
-- Вибираються лише потрібні колонки.
-- Об'єкти не потрапляють у Persistence Context: немає знімків і dirty checking.
-- N+1 неможливий: lazy-зв'язків у record немає.
+- Вибираються **лише потрібні** колонки.
+- Об'єкти не потрапляють у Persistence Context: немає знімків і dirty checking — менше пам'яті.
+- N+1 неможливий: у record немає lazy-зв'язків.
 
-Для екранів «тільки читання» (списки, звіти, API-відповіді) DTO-проєкція часто найкраща. Entity завантажуємо, коли збираємось їх змінювати.
+**Правило:** для екранів «тільки читання» (списки, звіти, відповіді API) DTO-проєкція часто найкраща. Entity завантажуємо, коли збираємось їх **змінювати**.
 
-### Дві колекції в одному `JOIN FETCH` (8 хв)
+## 6.3. Дві колекції в одному JOIN FETCH (8 хв)
 
-```java
-select c from Customer c left join fetch c.accounts left join fetch c.cards   // обидва List
+```sql
+select c from Customer c left join fetch c.accounts left join fetch c.cards
 ```
 
 - Два `List` → `MultipleBagFetchException`.
-- Навіть із `Set` — **декартовий добуток**: клієнт із 10 рахунками і 5 картками дає 50 рядків. На великих даних це гірше за N+1.
+- Навіть з `Set` — **декартовий добуток**: клієнт з 10 рахунками і 5 картками дає 10 × 5 = 50 рядків. На великих даних це гірше за N+1.
 
-Рішення: два окремі запити (спочатку клієнти з рахунками, потім ті самі клієнти з картками — Persistence Context склеїть результати), або batch fetch для другої колекції.
+Рішення: два окремі запити (спочатку клієнти з рахунками, потім ті самі клієнти з картками — Persistence Context «склеїть» результати), або batch fetching для другої колекції.
 
-### Пагінація з `JOIN FETCH` колекції (7 хв)
+## 6.4. Пагінація з JOIN FETCH колекції (7 хв)
 
 ```java
 em.createQuery("select c from Customer c left join fetch c.accounts", Customer.class)
   .setMaxResults(20)
 ```
 
-`LIMIT` у SQL обрізав би рядки, а не клієнтів (клієнт з 3 рахунками — 3 рядки). Тому Hibernate завантажує **всі** рядки і обрізає в пам'яті, з попередженням `HHH90003004` у лозі. На мільйоні клієнтів це OutOfMemoryError.
+`LIMIT` у SQL обрізав би **рядки**, а не клієнтів (клієнт з 3 рахунками — 3 рядки). Тому Hibernate завантажує **всі** рядки і обрізає сторінку в пам'яті, з попередженням `HHH90003004` у лозі. На мільйоні клієнтів це `OutOfMemoryError`.
 
-Рішення: спочатку сторінка id (`select c.id from Customer c order by c.id` з `setMaxResults`), потім `join fetch ... where c.id in :ids`. Щоб такі запити падали одразу, а не тихо: `hibernate.query.fail_on_pagination_over_collection_fetch=true`.
+Рішення в два кроки: спочатку сторінка id (`select c.id from Customer c order by c.id` з `setMaxResults`), потім `left join fetch ... where c.id in :ids`. Щоб такі запити падали одразу: `hibernate.query.fail_on_pagination_over_collection_fetch = true`.
+
+---
+
+## Словник
+
+| Термін | Простими словами |
+|---|---|
+| EAGER | Завантажувати зв'язок завжди |
+| LAZY | Завантажувати при першому зверненні |
+| Proxy | Заглушка-підклас з id, що довантажує себе |
+| N+1 | 1 запит списку + N запитів для зв'язків |
+| JOIN FETCH | JOIN, який ще й заповнює поле зв'язку |
+| Batch fetching | Довантаження зв'язків пачками `where id in (...)` |
+| DTO-проєкція | Запит, що одразу повертає record, а не entity |
 
 ---
 
 ## Контрольні питання
 
-1. Яке значення `fetch` за замовчуванням у `@ManyToOne` і чому його змінюють?
-   *EAGER; завантажує зв'язок завжди, навіть коли він не потрібен.*
+1. Яке значення `fetch` за замовчуванням у `@ManyToOne`?
+   *EAGER.*
 2. Чому EAGER не рятує від N+1 у JPQL?
-   *JPQL виконується як написаний, а EAGER-зв'язки довантажуються окремими запитами після нього.*
+   *JPQL виконується як написаний, EAGER-зв'язки довантажуються окремими запитами.*
 3. Чим `join` відрізняється від `join fetch`?
-   *`join` для фільтрації; `join fetch` ще й заповнює зв'язок у результаті.*
-4. Назви три правильні способи уникнути `LazyInitializationException`.
+   *`join` для фільтрації; `join fetch` ще й заповнює зв'язок.*
+4. Три правильні способи уникнути `LazyInitializationException`.
    *`JOIN FETCH`, entity graph, DTO-проєкція.*
 5. Чому пагінація з `JOIN FETCH` колекції небезпечна?
    *Hibernate обрізає сторінку в пам'яті після завантаження всіх рядків.*
@@ -219,12 +357,11 @@ em.createQuery("select c from Customer c left join fetch c.accounts", Customer.c
 
 ## Домашнє завдання
 
-- [ ] Учень отримує код із N+1 (дай свій приклад або використай наївну версію `transactionHistory` зі starter).
-- [ ] Виправити двома способами: `JOIN FETCH` і `default_batch_fetch_size`. Записати кількість запитів для кожного.
-- [ ] Письмово: який спосіб обрати для сторінки «історія операцій клієнта» і чому.
+- [ ] Поверни наївний `transactionHistory` (з циклом) і виправ N+1 **другим способом**: `hibernate.default_batch_fetch_size = 16` у `persistence.xml`. Запиши кількість запитів.
+- [ ] Порівняй з `JOIN FETCH` і письмово відповідай: який спосіб обрати для сторінки «історія операцій клієнта» і чому.
+- [ ] Поверни код з `JOIN FETCH`.
 
 ## Джерела
 
 - [Hibernate User Guide: Fetching](https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching)
 - [Hibernate User Guide: Batch fetching](https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching-batch)
-- [Jakarta Persistence 3.1: Entity Graphs (розділ 3.7)](https://jakarta.ee/specifications/persistence/3.1/)

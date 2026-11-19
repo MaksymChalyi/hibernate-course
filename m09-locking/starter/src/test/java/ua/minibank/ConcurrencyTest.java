@@ -3,6 +3,7 @@ package ua.minibank;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@DisplayName("Модуль 9 · Блокування")
 class ConcurrencyTest {
 
     private static EntityManagerFactory emf;
@@ -56,6 +58,7 @@ class ConcurrencyTest {
     // ---------- Обов'язкова частина ----------
 
     @Test
+    @DisplayName("Демо · lost update без захисту: 10 списань → зникло 9")
     void lostUpdateWithoutProtection() throws Exception {
         Long legacyId;
         try (EntityManager em = emf.createEntityManager()) {
@@ -83,6 +86,7 @@ class ConcurrencyTest {
     }
 
     @Test
+    @DisplayName("1 · конфлікт версій виявляється (@Version)")
     void versionConflictIsDetected() {
         try (EntityManager em1 = emf.createEntityManager(); EntityManager em2 = emf.createEntityManager()) {
             em1.getTransaction().begin();
@@ -102,6 +106,7 @@ class ConcurrencyTest {
     }
 
     @Test
+    @DisplayName("2 · pessimistic: 100 паралельних переказів — баланс коректний")
     void pessimisticTransfersAreConsistent() throws Exception {
         PessimisticTransferService service = new PessimisticTransferService(emf);
 
@@ -116,6 +121,7 @@ class ConcurrencyTest {
     // ---------- Резерв ----------
 
     @Test
+    @DisplayName("3 (резерв) · зустрічні перекази без deadlock")
     void oppositeTransfersDoNotDeadlock() throws Exception {
         PessimisticTransferService service = new PessimisticTransferService(emf);
         AtomicInteger counter = new AtomicInteger();
@@ -128,7 +134,7 @@ class ConcurrencyTest {
             }
         });
 
-        assertEquals(0, failures, "Deadlock: перевір порядок блокування рахунків");
+        assertEquals(0, failures, "Deadlock: блокуй рахунки в порядку зростання id (завдання 3)");
         assertMoney("1000", balance(accountA));
         assertMoney("1000", balance(accountB));
     }
@@ -136,6 +142,7 @@ class ConcurrencyTest {
     // ---------- Домашнє завдання ----------
 
     @Test
+    @DisplayName("4 (ДЗ) · optimistic з retry: жоден переказ не падає")
     void optimisticTransfersWithRetrySucceed() throws Exception {
         OptimisticTransferService service = new OptimisticTransferService(emf, 30);
 

@@ -1,16 +1,22 @@
 package ua.minibank.singletable;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
 import ua.minibank.common.CurrencyCode;
 
 import java.math.BigDecimal;
 
 /*
- * TODO 4. @Entity, значення дискримінатора "SEPA". Колонки beneficiary_iban (34), beneficiary_name (140).
+ * Завдання 4. SEPA-платіж у SINGLE_TABLE: @Entity і @DiscriminatorValue("SEPA").
  */
+// TODO 4 Над класом @Entity і @DiscriminatorValue("SEPA")
 public class SepaPayment extends Payment {
 
+    @Column(name = "beneficiary_iban", length = 34)
     private String beneficiaryIban;
 
+    @Column(name = "beneficiary_name", length = 140)
     private String beneficiaryName;
 
     protected SepaPayment() {

@@ -9,6 +9,7 @@
         <class>ua.minibank.domain.Customer</class>
         <class>ua.minibank.domain.Account</class>
         <class>ua.minibank.domain.Transaction</class>
+        <!-- TODO 2.2 Додати <class>ua.minibank.domain.StatementLine</class> -->
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
 
         <properties>
@@ -19,6 +20,7 @@
             -->
             <property name="hibernate.hbm2ddl.auto" value="validate"/>
             <property name="hibernate.connection.pool_size" value="20"/>
+            <!-- TODO 2.3 Batching: hibernate.jdbc.batch_size = 50, hibernate.order_inserts = true -->
         </properties>
     </persistence-unit>
 </persistence>

@@ -27,7 +27,7 @@ public class Main {
 
                 em.persist(new Transaction(uah, TransactionType.CREDIT, new BigDecimal("20000"), "Зарплата", Instant.now()));
                 em.persist(new Transaction(uah, TransactionType.DEBIT, new BigDecimal("5000"), "Оренда", Instant.now()));
-                // TODO (домашнє завдання): розкоментуй, коли Card стане entity
+                // TODO 5.5 (ДЗ) Розкоментуй рядок нижче, коли Card стане entity
                 // em.persist(new Card(uah, "4441 **** **** 1234", LocalDate.of(2029, 12, 31)));
 
                 em.getTransaction().commit();

@@ -8,6 +8,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Currency;
 
+/**
+ * Демо модуля 2: зберегти клієнта з адресою і рахунок, прочитати їх з бази.
+ * Дивись у консоль: спочатку create table (які колонки створив Hibernate), потім insert і select.
+ *
+ * У заготовці Main запрацює лише після завдань 1, 2 і 3: у persistence.xml перелічені і Customer, і Account,
+ * тому Hibernate не стартує, поки обидва класи не стануть entity.
+ */
 public class Main {
 
     public static void main(String[] args) {

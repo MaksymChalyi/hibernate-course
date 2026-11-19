@@ -1,12 +1,14 @@
 # Модуль 3. Persistence Context і життєвий цикл entity
 
-**Мета:** найважливіший модуль курсу. Без нього решта Hibernate виглядає як магія.
+**Що вмітимеш після модуля:**
+- пояснювати, що відбувається «всередині» `EntityManager`;
+- знати чотири стани об'єкта і як він переходить між ними;
+- передбачати, скільки SQL-запитів виконає Hibernate, ще до запуску;
+- змінювати дані без жодного `update`, і розуміти, чому це працює.
 
 **Код:** `m03-persistence-context/starter` → `m03-persistence-context/solution`
 
-**Критерій завершення:** учень правильно прогнозує кількість SQL для 4 із 5 сценаріїв домашнього завдання.
-
-> Якщо учень повільно прогнозує сценарії — розтягни модуль на два заняття. Усе наступне (транзакції, lazy loading, N+1, merge у веб-шарі) тримається на цьому модулі.
+**Чому цей модуль найважливіший.** Без нього Hibernate виглядає як магія: «я нічого не зберігав, а дані змінилися», «я зберіг, а в базі нічого», «звідки взялися 100 запитів». Після нього кожна така ситуація пояснюється за хвилину. Якщо за одне заняття не вийшло — краще повторити, ніж іти далі.
 
 ---
 
@@ -14,222 +16,381 @@
 
 | Блок | Час | Що робимо |
 |---|---|---|
-| Розбір ДЗ | 10 хв | `CurrencyConverter`, питання про `getFullName()` |
-| Теорія | 25 хв | Стани entity, операції, first-level cache, dirty checking, flush |
-| Практика | 25 хв | Сценарії 1–5: прогноз → запуск → пояснення; `rename` |
-| **Резерв** | 30 хв | `getReference`, `detach`/`clear`, `FlushMode`, `merge` vs `persist`, `equals`/`hashCode` |
+| Розбір ДЗ | 10 хв | `CurrencyConverter`, питання про `equals` для `Address` |
+| Теорія | 25 хв | Частини 1–5 |
+| Практика | 25 хв | Сценарії 1–5, `rename` |
+| **Резерв** | 30 хв | Частина 7, `merge`, `equals/hashCode` |
 
 ---
 
 ## Розбір домашнього завдання (10 хв)
 
 - Конвертер обробляє `null` в обидва боки?
-- `@Converter` + `@Convert` + запис у `persistence.xml` — усі три на місці?
-- `getFullName()`: Hibernate мапить поля (бо `@Id` на полі), методи для нього не існують.
+- Усі три місця на місці: `@Converter`, `@Convert` над полем, рядок у `persistence.xml`?
+- `equals` для `Address` за всіма полями: адреса — value object, у неї немає id. Дві однакові адреси — одна й та сама адреса. Клієнт має id: два клієнти з однаковими іменами — **різні** люди.
 
 ---
 
-## Теорія (25 хв)
+# Частина 1. Що таке Persistence Context
 
-### 1. Persistence Context (5 хв)
+## 1.1. Невидима «мапа» всередині EntityManager
 
-Кожен `EntityManager` має **Persistence Context** — мапу «тип + id → об'єкт» і знімки початкового стану кожного об'єкта.
+Кожен `EntityManager` тримає всередині структуру, яка називається **Persistence Context** («контекст збереження»). Найпростіше уявити її як `Map`:
 
 ```
 EntityManager
- └─ Persistence Context
-     ├─ Customer#1 → об'єкт + знімок {firstName=Olena, lastName=Koval, ...}
-     └─ Account#7  → об'єкт + знімок {...}
+└── Persistence Context
+    ├── Customer#1  →  об'єкт Customer + ЗНІМОК його полів у момент завантаження
+    ├── Customer#2  →  об'єкт Customer + знімок
+    └── Account#7   →  об'єкт Account  + знімок
 ```
 
-Аналогія для Java-розробника: це `Map<EntityKey, Object>` усередині `EntityManager`, яка живе, доки живе `EntityManager`.
+Ключ — тип + id. Значення — сам об'єкт і **знімок** (копія значень полів, якими вони були, коли об'єкт прийшов з бази).
 
-З цього випливають три речі:
+Живе ця мапа рівно стільки, скільки живе `EntityManager`. Закрили `EntityManager` — мапа зникла.
 
-1. **First-level cache.** Двічі `find(Customer.class, 1)` → один SELECT; другий раз об'єкт береться з мапи.
-2. **Гарантія ідентичності.** В одному `EntityManager` `find(…, 1) == find(…, 1)` — той самий об'єкт.
-3. **Dirty checking.** При flush Hibernate порівнює кожен об'єкт зі знімком і сам пише UPDATE для змінених.
+## 1.2. Три наслідки цієї мапи
 
-### 2. Стани entity (7 хв)
+**Наслідок 1. Кеш першого рівня.** `em.find` спочатку дивиться в мапу і лише потім іде в базу.
 
-| Стан | Що це | Як потрапити |
-|---|---|---|
-| **transient** | Новий об'єкт, Hibernate про нього не знає | `new Customer(...)` |
-| **managed** | У Persistence Context, зміни відстежуються | `persist`, `find`, запит, `merge` (повертає managed-копію) |
-| **detached** | Був managed, але `EntityManager` закрито / `detach` / `clear` | `em.close()`, `em.detach(c)`, `em.clear()` |
-| **removed** | Позначений до видалення, DELETE буде при flush | `em.remove(managed)` |
-
-```
-         persist                  close / detach / clear
-transient ───────▶ managed ─────────────────────────────▶ detached
-                    │  ▲                                   │
-              remove│  └──────────── merge (копія) ◀───────┘
-                    ▼
-                 removed ──flush──▶ DELETE
+```java
+try (EntityManager em = emf.createEntityManager()) {
+    Customer a = em.find(Customer.class, 1L);   // у мапі немає → SELECT, покласти в мапу
+    Customer b = em.find(Customer.class, 1L);   // у мапі є → без SQL
+}
 ```
 
-### 3. Основні операції (5 хв)
+**Наслідок 2. Один рядок — один об'єкт.** В одному `EntityManager` `a == b` — це **той самий** об'єкт у пам'яті, а не дві копії.
 
-| Операція | Що робить | SQL |
-|---|---|---|
-| `persist(new)` | transient → managed | INSERT при flush |
-| `find(Class, id)` | Шукає в Persistence Context, потім у базі | SELECT, якщо немає в контексті |
-| `remove(managed)` | managed → removed | DELETE при flush |
-| `merge(detached)` | Копіює стан detached-об'єкта в managed-копію і **повертає копію** | SELECT, якщо копії немає в контексті; UPDATE при flush, якщо є зміни |
+```java
+System.out.println(a == b);   // true
+```
 
-### 4. Dirty checking (4 хв)
+**Наслідок 3. Dirty checking.** Перед записом у базу Hibernate проходить по мапі і порівнює кожен об'єкт зі знімком. Змінилось поле — Hibernate сам пише `UPDATE`.
 
 ```java
 Jpa.runInTransaction(em -> {
-    Customer c = em.find(Customer.class, id);   // SELECT
-    c.setLastName("Kovalenko");                 // нічого
-});                                             // commit → flush → UPDATE
+    Customer c = em.find(Customer.class, 1L);    // SELECT + знімок {lastName = "Koval"}
+    c.setLastName("Kovalenko");                  // просто змінили поле в Java
+});                                              // commit → порівняння: "Koval" ≠ "Kovalenko" → UPDATE
 ```
 
-Методу `update()` в JPA немає — і він не потрібен. Найпоширеніша помилка новачків — викликати `merge` на об'єкті, який і так managed.
+Методу `update()` у JPA **немає** — він не потрібен. Це найбільший «шок» для тих, хто прийшов з JDBC.
 
-### 5. Flush (4 хв)
+**Перевір себе:**
+1. Де Hibernate бере об'єкт при другому `find` того самого id в одному `EntityManager`?
+2. Навіщо Hibernate зберігає знімок кожного об'єкта?
 
-**Flush** — момент, коли Hibernate відправляє накопичені зміни в базу (INSERT/UPDATE/DELETE). Це **не commit**: після flush транзакція ще може відкотитися.
+---
 
-Flush відбувається:
+# Частина 2. Чотири стани entity
 
-- перед `commit`;
-- перед JPQL-запитом, результат якого залежить від незбережених змін (`FlushMode.AUTO`);
-- при явному `em.flush()`.
+Будь-який об'єкт entity в кожен момент перебуває в одному з чотирьох станів. Стан визначається тим, **чи є об'єкт у мапі якогось EntityManager**.
+
+| Стан | Простими словами | Чи стежить Hibernate за змінами | Як потрапити |
+|---|---|---|---|
+| **transient** (новий) | Щойно створений `new`, Hibernate про нього не знає | Ні | `new Customer(...)` |
+| **managed** (під наглядом) | Лежить у Persistence Context відкритого `EntityManager` | **Так** | `persist`, `find`, результат запиту, результат `merge` |
+| **detached** (від'єднаний) | Колись був managed, але `EntityManager` закрито або об'єкт прибрали з мапи | Ні | `em.close()`, `em.detach(obj)`, `em.clear()` |
+| **removed** (на видалення) | Позначений до видалення, `DELETE` буде при flush | — | `em.remove(managed)` |
+
+```
+                persist                       close() / detach() / clear()
+ transient ─────────────▶ managed ─────────────────────────────────────▶ detached
+  (new)                    │   ▲                                            │
+                    remove │   │ find / запит                               │
+                           ▼   │                                            │
+                        removed                     merge → повертає НОВУ managed-копію
+                           │                                                │
+                     flush │                      managed (копія) ◀─────────┘
+                           ▼
+                        DELETE
+```
+
+### Приклад: увесь життєвий цикл одного клієнта
+
+```java
+Customer c = new Customer("Olena", "Koval", "olena@example.com");   // transient
+
+try (EntityManager em = emf.createEntityManager()) {
+    em.getTransaction().begin();
+    em.persist(c);                     // managed: тепер Hibernate за ним стежить
+    c.setLastName("Kovalenko");        // зміна managed-об'єкта — потрапить у базу
+    em.getTransaction().commit();      // INSERT (одразу з новим прізвищем)
+}                                      // EntityManager закрито → c тепер detached
+
+c.setLastName("Petrenko");             // detached: Hibernate про зміну не знає, у базу НЕ потрапить
+```
+
+**Перевір себе:**
+1. У якому стані об'єкт, отриманий з `em.find`, після закриття `EntityManager`?
+2. Чи потрапить у базу зміна поля detached-об'єкта?
+
+---
+
+# Частина 3. Основні операції EntityManager
+
+| Операція | Що робить зі станом | SQL | Коли SQL виконається |
+|---|---|---|---|
+| `persist(new)` | transient → managed | `INSERT` | При flush (див. частину 4) |
+| `find(Class, id)` | → managed | `SELECT`, якщо об'єкта немає в мапі | Одразу |
+| `getReference(Class, id)` | → managed proxy-заглушка | Нічого, поки не звернутись до поля | При першому зверненні |
+| запит JPQL | Результати → managed | `SELECT` | Одразу |
+| `remove(managed)` | managed → removed | `DELETE` | При flush |
+| `merge(detached)` | Повертає **іншу**, managed-копію | `SELECT`, якщо копії немає в мапі; `UPDATE`, якщо є зміни | `SELECT` одразу, `UPDATE` при flush |
+| `detach(obj)` | managed → detached | — | — |
+| `clear()` | Усі об'єкти → detached, мапа порожня | — | — |
+| `contains(obj)` | Перевірити, чи managed | — | — |
+
+### merge — найчастіше джерело помилок
+
+```java
+Customer detached = ...;                 // завантажений раніше, EntityManager закритий
+detached.setEmail("new@example.com");
+
+Customer managed = em.merge(detached);   // merge НЕ «приєднує» detached, а повертає КОПІЮ
+detached.setEmail("other@example.com");  // ця зміна НЕ збережеться — detached досі detached
+managed.setEmail("other@example.com");   // ця — збережеться
+```
+
+Правило: **після `merge` працюй з тим, що він повернув**.
+
+І друге правило: **не викликай `merge` для об'єкта, який і так managed**. Об'єкт з `find` уже під наглядом — достатньо змінити поле.
+
+---
+
+# Частина 4. Flush: коли SQL насправді йде в базу
+
+## 4.1. Hibernate відкладає SQL
+
+`persist`, `remove` і зміна полів **не** виконують SQL одразу. Hibernate накопичує зміни і відправляє їх у базу пакетом. Момент відправки називається **flush** («скинути»).
+
+```java
+em.getTransaction().begin();
+em.persist(customer);          // SQL ще немає
+customer.setEmail("x@y.z");    // SQL ще немає
+em.getTransaction().commit();  // flush: INSERT (вже з новим email) + commit транзакції
+```
+
+**Flush ≠ commit.** Flush — відправити SQL у базу всередині транзакції. Commit — зафіксувати транзакцію. Після flush транзакцію ще можна відкотити — і все, що «скинули», скасується в базі.
+
+## 4.2. Коли відбувається flush
+
+| Момент | Чому |
+|---|---|
+| Перед `commit` | Щоб зафіксувати всі зміни |
+| Перед JPQL-запитом, результат якого залежить від незбережених змін | Щоб запит побачив актуальні дані |
+| Явний виклик `em.flush()` | Коли треба побачити SQL / помилку бази саме зараз |
+
+Другий пункт — режим `FlushMode.AUTO`, він увімкнений за замовчуванням:
+
+```java
+em.getTransaction().begin();
+Customer c = em.find(Customer.class, 1L);                    // SELECT
+c.setLastName("Changed");                                   // SQL ще немає
+em.createQuery("select c from Customer c where c.lastName = 'Changed'", Customer.class)
+  .getResultList();                                          // flush: UPDATE, потім SELECT
+em.getTransaction().rollback();                              // UPDATE скасовано в базі
+```
+
+Якби Hibernate не зробив flush перед запитом, база не знайшла б клієнта з прізвищем `Changed` — хоча в пам'яті він уже такий. Результат був би неконсистентним. Тому Hibernate «скидає» зміни перед запитом.
+
+Rollback скасовує зміни **в базі**, але запити вже виконані — їх кількість не зменшиться.
+
+**Перевір себе:**
+1. Чим flush відрізняється від commit?
+2. Чому Hibernate робить flush перед JPQL-запитом?
+
+---
+
+# Частина 5. Скільки SQL? Шпаргалка
+
+Тримай цю таблицю відкритою на практиці.
+
+| Дія | Іде в базу? |
+|---|---|
+| `em.find`, об'єкта **немає** в Persistence Context | `SELECT` |
+| `em.find`, об'єкт **уже є** в Persistence Context цього `EntityManager` | Ні |
+| `em.find` у **новому** `EntityManager` | `SELECT` (у нового `EntityManager` своя, порожня мапа) |
+| JPQL-запит | `SELECT` — завжди, кеш першого рівня для запитів не працює |
+| Знайдені запитом об'єкти | Потрапляють у мапу: наступний `find` їх уже не завантажує |
+| Зміна поля managed-об'єкта | `UPDATE` при flush, **лише якщо значення справді змінилось** |
+| Записати в поле те саме значення | Ні: знімок і поточне значення однакові |
+| `em.remove(obj)` | `DELETE` при flush. Сам `remove` потребує managed-об'єкта — зазвичай перед ним `find` |
+| `em.getReference(...)` + лише `getId()` | Ні: id відомий без бази |
+| `em.getReference(...)` + будь-яке інше поле | `SELECT` у момент звернення |
+| `em.clear()` | Ні, але після нього мапа порожня: наступний `find` — знову `SELECT` |
+| `em.merge(detached)`, копії немає в мапі | `SELECT` одразу; `UPDATE` при flush, якщо є зміни |
+| Rollback | Не скасовує вже виконані запити — лише їхній ефект у базі |
 
 ---
 
 ## Практика (25 хв)
 
-### Сценарії (20 хв)
+### Завдання 1. Прогноз SQL (сценарії 1–5)
 
-Правило: **спочатку прогноз, потім запуск**. Учень читає метод у `Scenarios`, записує число в `Predictions`, пояснює вголос, і лише тоді запускає `ScenarioTest`.
+**Файли:** `Scenarios.java` (читати), `Predictions.java` (писати).
 
-| # | Сценарій | Відповідь | Чому |
+**Як працюємо — однаково для кожного сценарію:**
+1. Учень читає метод `sN` у `Scenarios` **вголос**.
+2. Для кожного рядка каже: іде в базу чи ні (дивимось шпаргалку з частини 5).
+3. Вписує число в `Predictions` і над ним — коментар-пояснення.
+4. Запускає `ScenarioTest`. Зелений — переходимо далі. Червоний — читаємо консоль цього тесту, знаходимо «зайвий» або «відсутній» SQL і виправляємо **пояснення**.
+
+**Головне правило:** не підганяти число під тест. Цінність вправи — у поясненні.
+
+**Розбір для викладача** (учню не показувати до його прогнозу):
+
+| # | Код | Відповідь | Пояснення |
 |---|---|---|---|
-| 1 | Двічі `find` в одному EM | 1 | Другий — з first-level cache |
-| 2 | `find` у двох різних EM | 2 | У кожного EM свій контекст |
-| 3 | `find`, змінити прізвище, commit | 2 | SELECT + UPDATE від dirty checking |
-| 4 | `find`, записати те саме значення, commit | 1 | Значення не змінилося — UPDATE не потрібен |
-| 5 | `find`, змінити, JPQL по клієнтах, rollback | 3 | AUTO flush перед запитом: SELECT + UPDATE + SELECT |
+| 1 | `find`, `find` в одному EM | **1** | Другий `find` бере об'єкт з Persistence Context |
+| 2 | `find` у двох EM | **2** | У кожного EM своя мапа |
+| 3 | `find`, `setLastName("Kovalenko")`, commit | **2** | `SELECT` + `UPDATE` від dirty checking |
+| 4 | `find`, `setLastName(c.getLastName())`, commit | **1** | Значення не змінилося — знімок однаковий, `UPDATE` немає |
+| 5 | `find`, змінити, JPQL, rollback | **3** | `SELECT`, AUTO flush перед запитом → `UPDATE`, `SELECT` запиту. Rollback не зменшує кількість |
 
-Сценарій 5 зазвичай найнесподіваніший. Поясни: якщо не скинути UPDATE перед запитом `where c.lastName = 'Changed'`, запит не знайшов би щойно змінений об'єкт — результат був би неконсистентним. Rollback потім скасовує UPDATE у базі, але сам запит уже виконано.
+### Завдання 2. rename без update
 
-Відповіді на сценарії 6–10 **не показуй**: це домашнє завдання.
-
-### `CustomerService.rename` (5 хв)
+**Файл:** `CustomerService.java`. Кроки — у коментарі над методом.
 
 ```java
 public void rename(Long customerId, String newLastName) {
     Jpa.runInTransaction(em -> {
         Customer customer = em.find(Customer.class, customerId);
-        if (customer == null) throw new IllegalArgumentException("Клієнта " + customerId + " не знайдено");
+        if (customer == null) {
+            throw new IllegalArgumentException("Клієнта " + customerId + " не знайдено");
+        }
         customer.setLastName(newLastName);
     });
 }
 ```
 
-Тест `renameUsesDirtyCheckingOnly` перевіряє, що виконано рівно 2 запити. Якщо учень додав `em.merge(customer)` — тест пройде, але запитай, навіщо цей рядок.
+`Jpa.runInTransaction` — готовий helper у цьому модулі: відкриває `EntityManager`, починає транзакцію, виконує код і робить commit (або rollback при помилці). Відкрий `Jpa.java` і подивись — це той самий шаблон, що ми писали руками в модулі 1.
+
+**Перевірка:** тест «2 · rename(): лише SELECT + UPDATE». Якщо учень додав `em.merge(customer)` «про всяк випадок» — тест пройде, але спитай: навіщо цей рядок? (Він нічого не робить: об'єкт уже managed.)
 
 ---
 
-## Резерв (30 хв)
+# Частина 6. Резерв (30 хв)
 
-### `getReference`, `detach`, `clear` (7 хв)
+## 6.1. getReference, detach, clear (7 хв)
 
-- `getReference(Customer.class, id)` повертає **proxy** без SELECT. Запит буде при першому зверненні до поля (крім `getId()`). Корисно, щоб поставити зв'язок, не завантажуючи об'єкт:
-  ```java
-  Account account = em.getReference(Account.class, accountId);   // без SELECT
-  em.persist(new Transaction(account, ...));                     // лише INSERT
-  ```
-  Якщо запису немає — `EntityNotFoundException`, але лише при зверненні до полів.
-- `detach(entity)` — прибрати один об'єкт з контексту; незбережені зміни втрачаються.
-- `clear()` — очистити весь контекст. Використовується в масовому імпорті (модуль 10).
+`getReference` повертає **proxy** — «заглушку», підклас `Customer`, у якої заповнений лише id. Запит у базу буде при першому зверненні до будь-якого поля, крім `getId()`.
 
-### `FlushMode.AUTO` vs `COMMIT` (5 хв)
-
-`em.setFlushMode(FlushModeType.COMMIT)` — flush лише при commit. Запити швидші (без перевірки змін), але можуть не бачити власних незбережених змін. За замовчуванням — `AUTO`, і змінювати його варто лише свідомо.
-
-### `merge` vs `persist` (8 хв)
+Навіщо: поставити зв'язок, не завантажуючи об'єкт.
 
 ```java
-Customer detached = ...;              // завантажений в іншому, закритому EM
-detached.setEmail("new@example.com");
-
-Customer managed = em.merge(detached);
-detached.setEmail("other@example.com");   // ⚠️ ця зміна НЕ збережеться
-managed.setEmail("other@example.com");    // ✅ ця — збережеться
+Account account = em.getReference(Account.class, accountId);   // без SELECT
+em.persist(new Transaction(account, ...));                      // лише INSERT з account_id
 ```
 
-`merge` не «приєднує» переданий об'єкт, а копіює його стан у managed-копію. Працювати далі треба з **результатом** `merge`. Тест `mergeReturnsManagedCopyAndSavesChanges` перевіряє саме це.
+Якщо такого id немає в базі, `EntityNotFoundException` вилетить не одразу, а при зверненні до поля.
 
-`persist` для detached-об'єкта кидає помилку: Hibernate бачить id і вважає, що об'єкт уже існує.
+`detach(obj)` — прибрати один об'єкт з мапи. `clear()` — очистити всю мапу. Незбережені зміни при цьому **втрачаються**. `clear()` знадобиться в модулі 10 для масового імпорту.
 
-Сценарій 10 домашнього завдання показує ще одну деталь: `merge` без змін — це SELECT без UPDATE.
+## 6.2. FlushMode.COMMIT (3 хв)
 
-### `equals`/`hashCode` для entity (10 хв)
+`em.setFlushMode(FlushModeType.COMMIT)` — flush лише при commit. Запити трохи швидші, але можуть не бачити власних незбережених змін. Змінювати режим без вагомої причини не варто.
 
-Вимоги:
+## 6.3. merge на практиці (8 хв, завдання 3)
 
-1. Два нових об'єкти (id = `null`) — **не** рівні.
-2. Об'єкти з однаковим id рівні, навіть якщо завантажені різними `EntityManager`.
-3. `hashCode` не змінюється, коли після `persist` з'являється id.
+```java
+public Customer changeEmail(Customer detached, String newEmail) {
+    detached.setEmail(newEmail);
+    return Jpa.inTransaction(em -> em.merge(detached));
+}
+```
+
+Тест перевіряє `assertNotSame(detached, merged)`: це два різні об'єкти.
+
+`persist` для detached-об'єкта кидає помилку: Hibernate бачить id і вважає, що такий об'єкт уже існує.
+
+## 6.4. equals і hashCode для entity (12 хв, завдання 4)
+
+Вимоги до `equals`/`hashCode` для entity з генерованим id:
+
+1. Два **нових** клієнти (id ще `null`) — різні.
+2. Клієнти з однаковим id — рівні, навіть якщо завантажені різними `EntityManager` (це різні об'єкти в пам'яті).
+3. `hashCode` **не змінюється**, коли після `persist` з'являється id. Інакше об'єкт «губиться» в `HashSet`: його поклали в кошик за старим hashCode, а шукають у новому.
+
+Наївна реалізація з заготовки порушує 1 і 3:
+
+```java
+public boolean equals(Object o) { ... return Objects.equals(id, other.id); }   // null == null → «рівні»
+public int hashCode() { return Objects.hash(id); }                             // змінюється з появою id
+```
+
+Правильна:
 
 ```java
 @Override
 public boolean equals(Object o) {
     if (this == o) return true;
-    if (!(o instanceof Customer other)) return false;
-    return getId() != null && getId().equals(other.getId());
+    if (!(o instanceof Customer other)) return false;      // instanceof: proxy — підклас Customer
+    return getId() != null && getId().equals(other.getId()); // getId(): у proxy поле порожнє
 }
 
 @Override
 public int hashCode() {
-    return Customer.class.hashCode();   // константа
+    return Customer.class.hashCode();                        // константа — не залежить від id
 }
 ```
 
-- `instanceof`, а не `getClass() ==`: Hibernate-proxy — підклас `Customer`.
-- `getId()`, а не поле: у proxy поле порожнє.
-- Константний `hashCode` — ціна: усі клієнти в одному bucket `HashSet`. Для десятків-сотень елементів це неважливо; мільйон entity в `HashSet` тримати не треба взагалі.
+Ціна константного `hashCode`: усі клієнти в `HashSet` в одному кошику, пошук повільніший. Для десятків-сотень об'єктів це неважливо; мільйон entity в `HashSet` тримати не варто взагалі.
 
-Альтернатива — business key (`email`, IBAN), якщо він незмінний і обов'язковий.
+Альтернатива — порівнювати за незмінним бізнес-ключем (email, IBAN), якщо такий є.
+
+---
+
+## Словник
+
+| Термін | Простими словами |
+|---|---|
+| Persistence Context | «Мапа» managed-об'єктів усередині `EntityManager` |
+| Знімок (snapshot) | Копія полів у момент завантаження, для dirty checking |
+| Dirty checking | Порівняння об'єктів зі знімками і автоматичний `UPDATE` |
+| Flush | Відправити накопичений SQL у базу (ще не commit) |
+| transient / managed / detached / removed | Чотири стани entity |
+| Proxy | Заглушка-підклас, що завантажує дані при першому зверненні |
 
 ---
 
 ## Контрольні питання
 
 1. Що таке Persistence Context і скільки він живе?
-   *Мапа managed-об'єктів і їхніх знімків у `EntityManager`; живе, доки живе `EntityManager`.*
-2. Чим flush відрізняється від commit?
-   *Flush відправляє SQL у базу всередині транзакції; commit фіксує транзакцію.*
-3. Чому в JPA немає методу `update`?
+   *Мапа managed-об'єктів і знімків у `EntityManager`; живе, поки живе `EntityManager`.*
+2. Чому в JPA немає `update`?
    *Зміни managed-об'єктів знаходить dirty checking при flush.*
-4. Що повертає `merge` і з яким об'єктом працювати після нього?
-   *Managed-копію; далі працювати з нею, а не з переданим detached.*
+3. Чим flush відрізняється від commit?
+   *Flush відправляє SQL усередині транзакції; commit фіксує транзакцію.*
+4. Що поверне `merge` і з яким об'єктом працювати далі?
+   *Managed-копію; працювати з нею.*
 5. Чому в сценарії 5 три запити, хоча транзакцію відкочено?
-   *AUTO flush виконав UPDATE перед запитом; rollback скасовує зміни, але не «скасовує» вже виконані запити.*
+   *AUTO flush виконав UPDATE перед запитом; rollback не скасовує виконаних запитів.*
+6. Чому `hashCode` entity не повинен залежати від згенерованого id?
+   *Об'єкт загубиться в `HashSet` після появи id.*
 
 ---
 
 ## Домашнє завдання
 
-- [ ] Сценарії 6–10: прогноз у `Predictions` + письмове пояснення кожного (1–2 речення) у коментарі над константою.
-- [ ] Тест `ScenarioTest` зелений.
-- [ ] Резерв, якщо не встигли на занятті: `changeEmail` через `merge` і виправити `equals`/`hashCode`.
+- [ ] Сценарії 6–10: прогноз у `Predictions` + коментар-пояснення над кожною константою.
+- [ ] Усі тести `ScenarioTest` зелені.
+- [ ] Резерв, якщо не встигли: `changeEmail` і виправити `equals/hashCode`.
+
+**Відповіді до ДЗ (для викладача):** 6 → 2 (`clear` спорожнив мапу), 7 → 0 (proxy, id відомий), 8 → 2 (`SELECT` + `DELETE`), 9 → 1 (запит поклав клієнта в мапу), 10 → 1 (`merge` завантажив копію; змін немає — `UPDATE` немає).
 
 ## Типові помилки
 
 | Помилка | Наслідок |
 |---|---|
-| `em.merge(managed)` «про всяк випадок» | Зайвий код, нерозуміння стану об'єкта |
+| `em.merge(managed)` «про всяк випадок» | Зайвий код і нерозуміння стану |
 | Зміни в detached-об'єкті після `merge` | Зміни мовчки втрачаються |
-| `equals` за полем `id` через `Objects.equals` | Два нових клієнти «рівні»; об'єкт губиться в `HashSet` після `persist` |
-| Довгоживучий `EntityManager` (поле класу, static) | Persistence Context росте, дані застарівають, не потокобезпечно |
+| `EntityManager` у полі класу, один на весь застосунок | Мапа росте, дані застарівають, не потокобезпечно |
+| `equals` через `Objects.equals(id, ...)` | Нові клієнти «рівні»; об'єкт губиться в `HashSet` |
 
 ## Джерела
 
 - [Hibernate User Guide: Persistence Context](https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#pc)
 - [Hibernate User Guide: Flushing](https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#flushing)
-- [Jakarta Persistence 3.1: Entity Instance's Life Cycle (розділ 3.2)](https://jakarta.ee/specifications/persistence/3.1/)
+- [Jakarta Persistence 3.1](https://jakarta.ee/specifications/persistence/3.1/)

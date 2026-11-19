@@ -3,6 +3,7 @@ package ua.minibank;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,7 @@ import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@DisplayName("Модуль 4 · TransferService")
 class TransferServiceTest {
 
     private static EntityManagerFactory emf;
@@ -53,6 +55,7 @@ class TransferServiceTest {
     // ---------- Обов'язкова частина ----------
 
     @Test
+    @DisplayName("1 · переказ змінює обидва баланси і пише 2 операції")
     void transferMovesMoneyAndWritesTwoTransactions() {
         service.transfer(uah1, uah2, new BigDecimal("250"));
 
@@ -62,6 +65,7 @@ class TransferServiceTest {
     }
 
     @Test
+    @DisplayName("1 · збій посередині — відкат усього (rollback)")
     void failureAfterDebitRollsBackEverything() {
         TransferService failing = new TransferService(emf, () -> {
             throw new IllegalStateException("Збій посередині переказу");
@@ -71,15 +75,17 @@ class TransferServiceTest {
 
         assertBalance(uah1, "1000");
         assertBalance(uah2, "100");
-        assertEquals(0, transactionCount(), "Запис про списання теж має відкотитись");
+        assertEquals(0, transactionCount(), "Запис про списання теж має відкотитись: rollback у catch, якщо tx.isActive()");
     }
 
     @Test
+    @DisplayName("1 · неіснуючий рахунок → AccountNotFoundException")
     void unknownAccountIsReported() {
         assertThrows(AccountNotFoundException.class, () -> service.transfer(uah1, 999_999L, BigDecimal.TEN));
     }
 
     @Test
+    @DisplayName("1 · сума ≤ 0 → IllegalArgumentException")
     void nonPositiveAmountIsRejected() {
         assertThrows(IllegalArgumentException.class, () -> service.transfer(uah1, uah2, BigDecimal.ZERO));
         assertThrows(IllegalArgumentException.class, () -> service.transfer(uah1, uah2, new BigDecimal("-5")));
@@ -88,6 +94,7 @@ class TransferServiceTest {
     // ---------- Домашнє завдання ----------
 
     @Test
+    @DisplayName("2 (ДЗ) · недостатньо коштів → InsufficientFundsException, баланси без змін")
     void insufficientFundsLeavesBalancesUntouched() {
         assertThrows(InsufficientFundsException.class, () -> service.transfer(uah2, uah1, new BigDecimal("100.01")));
 
@@ -97,6 +104,7 @@ class TransferServiceTest {
     }
 
     @Test
+    @DisplayName("2 (ДЗ) · різні валюти → CurrencyMismatchException")
     void transferBetweenDifferentCurrenciesIsRejected() {
         assertThrows(CurrencyMismatchException.class, () -> service.transfer(uah1, usd, BigDecimal.TEN));
 

@@ -3,6 +3,7 @@ package ua.minibank;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Резерв: helper Tx. */
+@DisplayName("Модуль 4 · Helper Tx (резерв)")
 class TxTest {
 
     private static EntityManagerFactory emf;
@@ -40,6 +42,7 @@ class TxTest {
     }
 
     @Test
+    @DisplayName("3 (резерв) · inTransaction комітить і повертає результат")
     void commitsAndReturnsResult() {
         Long id = Tx.inTransaction(emf, em -> {
             Account account = new Account("UA100", CurrencyCode.EUR, BigDecimal.ONE);
@@ -52,6 +55,7 @@ class TxTest {
     }
 
     @Test
+    @DisplayName("3 (резерв) · при помилці rollback і той самий виняток далі")
     void rollsBackAndRethrowsTheSameException() {
         IllegalStateException failure = new IllegalStateException("boom");
 

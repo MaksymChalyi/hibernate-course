@@ -1,5 +1,6 @@
 package ua.minibank;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ua.minibank.service.ReportService;
 import ua.minibank.service.TransactionView;
@@ -8,11 +9,13 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@DisplayName("Модуль 12 · ReportService")
 class ReportServiceTest extends PostgresTestBase {
 
     private final ReportService service = new ReportService(EMF);
 
     @Test
+    @DisplayName("1–3 · Приклад: історія лише операцій цього клієнта")
     void historyContainsTransactionsOfAllCustomerAccounts() {
         Long customerId = TestData.customer()
                 .accountWithTransactions("UA01", 3)
@@ -31,6 +34,7 @@ class ReportServiceTest extends PostgresTestBase {
      * Без JOIN FETCH тест покаже 11 запитів замість одного.
      */
     @Test
+    @DisplayName("7 (ДЗ) · історія завантажується одним запитом (захист від N+1)")
     void historyUsesOneQuery() {
         TestData.CustomerBuilder builder = TestData.customer();
         for (int i = 0; i < 10; i++) {

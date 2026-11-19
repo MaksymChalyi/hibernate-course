@@ -21,15 +21,23 @@ public final class Emfs {
         return Persistence.createEntityManagerFactory("minibank");
     }
 
-    /**
-     * TODO 2. Фабрика з увімкненим JDBC batching. Передай у createEntityManagerFactory другий аргумент —
-     * Map з властивостями:
-     *   hibernate.jdbc.batch_size = batchSize
-     *   hibernate.order_inserts   = true
-     *   hibernate.order_updates   = true
-     * Питання: навіщо order_inserts, якщо в нас лише одна entity?
+    /*
+     * Завдання 2. Фабрика з увімкненим JDBC batching.
+     *
+     * Batching — Hibernate накопичує однакові INSERT і відправляє їх пачкою (по batchSize штук) одним зверненням
+     * до бази, а не по одному. Вмикається трьома властивостями. Передаємо їх другим аргументом:
+     *
+     *     return Persistence.createEntityManagerFactory("minibank", Map.of(
+     *             "hibernate.jdbc.batch_size", String.valueOf(batchSize),
+     *             "hibernate.order_inserts", "true",
+     *             "hibernate.order_updates", "true"));
+     *
+     * order_inserts — групувати INSERT за таблицями. Якщо в одній транзакції чергуються різні entity
+     * (операція, рахунок, операція...), без нього пачка розривається на кожній зміні таблиці.
+     * У нас одна entity, але налаштування — стандартна практика.
      */
     public static EntityManagerFactory withBatching(int batchSize) {
+        // TODO 2 Передати в createEntityManagerFactory Map з hibernate.jdbc.batch_size, order_inserts, order_updates
         return Persistence.createEntityManagerFactory("minibank");
     }
 

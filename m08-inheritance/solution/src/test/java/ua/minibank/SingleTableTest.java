@@ -2,6 +2,7 @@ package ua.minibank;
 
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+@DisplayName("Модуль 8 · SINGLE_TABLE (завдання 1–4)")
 class SingleTableTest {
 
     private static EntityManagerFactory emf;
@@ -45,11 +47,13 @@ class SingleTableTest {
     }
 
     @Test
+    @DisplayName("2 · уся ієрархія в одній таблиці payments")
     void wholeHierarchyLivesInOneTable() {
         assertEquals(List.of("payments"), Db.tables(emf, "m08_single"));
     }
 
     @Test
+    @DisplayName("2–4 · payment_type містить CARD і SEPA")
     void discriminatorColumnStoresType() {
         List<?> types = Db.get(emf, em -> em.createNativeQuery("select payment_type from payments order by id").getResultList());
 
@@ -57,6 +61,7 @@ class SingleTableTest {
     }
 
     @Test
+    @DisplayName("3 · у рядку картки колонки SEPA порожні")
     void cardRowHasNullSepaColumns() {
         Object iban = Db.get(emf, em -> em.createNativeQuery(
                 "select beneficiary_iban from payments where payment_type = 'CARD'").getSingleResult());
@@ -65,6 +70,7 @@ class SingleTableTest {
     }
 
     @Test
+    @DisplayName("2–4 · select p from Payment p повертає CardPayment і SepaPayment")
     void polymorphicQueryReturnsConcreteTypes() {
         List<Payment> payments = Db.get(emf, em ->
                 em.createQuery("select p from Payment p order by p.id", Payment.class).getResultList());
@@ -75,6 +81,7 @@ class SingleTableTest {
     }
 
     @Test
+    @DisplayName("Резерв · type(p) = CardPayment")
     void typeFunctionFiltersBySubclass() {
         List<Payment> cards = Db.get(emf, em ->
                 em.createQuery("select p from Payment p where type(p) = CardPayment", Payment.class).getResultList());
@@ -83,6 +90,7 @@ class SingleTableTest {
     }
 
     @Test
+    @DisplayName("1 · @PrePersist / @PreUpdate заповнюють дати")
     void baseEntityFillsTimestamps() {
         Long id = Db.get(emf, em -> em.createQuery("select p.id from Payment p where type(p) = CardPayment", Long.class)
                 .getSingleResult());

@@ -1,23 +1,49 @@
 package ua.minibank.tableperclass;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Inheritance;
+import jakarta.persistence.InheritanceType;
 import ua.minibank.common.BaseEntity;
 import ua.minibank.common.CurrencyCode;
 import ua.minibank.common.PaymentStatus;
 
 import java.math.BigDecimal;
 
-/*
- * TODO 8 (резерв). TABLE_PER_CLASS: @Entity, @Inheritance(strategy = InheritanceType.TABLE_PER_CLASS).
- * У абстрактного Payment таблиці не буде. Чому тут не можна IDENTITY?
+/**
+ * Резерв. TABLE_PER_CLASS: у кожного конкретного класу своя повна таблиця
+ * (card_payments, sepa_payments), спільні колонки повторюються в кожній.
+ * Абстрактний Payment таблиці не має.
+ *
+ * + запит до конкретного типу — одна таблиця без JOIN;
+ * − поліморфний запит "select p from Payment p" — UNION ALL усіх таблиць;
+ *   id мають бути унікальні в усій ієрархії, тому IDENTITY заборонено (лише SEQUENCE/TABLE).
  */
+/*
+ * Завдання 8 (резерв). Стратегія TABLE_PER_CLASS: кожен конкретний клас — окрема повна таблиця.
+ *
+ *   @Entity
+ *   @Inheritance(strategy = InheritanceType.TABLE_PER_CLASS)
+ *
+ * @Table немає: абстрактний Payment таблиці не має. Чому з цією стратегією не можна IDENTITY? (лекція)
+ */
+// TODO 8 (резерв) Над класом @Entity і @Inheritance(TABLE_PER_CLASS)
 public abstract class Payment extends BaseEntity {
 
+    @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 3)
     private CurrencyCode currency;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     private PaymentStatus status;
 
+    @Column(name = "payer_account", nullable = false, length = 34)
     private String payerAccount;
 
     protected Payment() {

@@ -29,7 +29,7 @@ public class Main {
 
             stats.clear();
             new AccountReportService(emf).accountOwnerLines();
-            System.out.println("JOIN FETCH:   запитів = " + stats.getPrepareStatementCount());
+            System.out.println("accountOwnerLines(): запитів = " + stats.getPrepareStatementCount() + "  (після завдання 2 має бути 1)");
         }
     }
 }

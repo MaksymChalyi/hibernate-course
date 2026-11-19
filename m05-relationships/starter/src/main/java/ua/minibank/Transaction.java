@@ -22,10 +22,15 @@ public class Transaction {
     @SequenceGenerator(name = "transaction_seq", sequenceName = "transaction_seq", allocationSize = 50)
     private Long id;
 
-    /**
-     * TODO 4. Зв'язок "операція → рахунок": @ManyToOne, LAZY, обов'язковий, колонка account_id.
-     * У модулі 4 тут був Long accountId. Що ми виграли, замінивши його на Account?
+    /*
+     * Завдання 4. Зв'язок «операція → рахунок». Те саме, що завдання 1, тільки колонка account_id.
+     *
+     *   @ManyToOne(fetch = FetchType.LAZY, optional = false)
+     *   @JoinColumn(name = "account_id", nullable = false)
+     *
+     * Питання: у модулі 4 тут було Long accountId. Що ми виграли, замінивши його на Account?
      */
+    // TODO 4 Над полем account: @ManyToOne(fetch = FetchType.LAZY, optional = false) і @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
     @Enumerated(EnumType.STRING)
